@@ -11,7 +11,7 @@ test = false
 bench = false
 
 [lib]
-name = "yuki_os_lib"
+name = "kernel_lib"
 path = "src/lib.rs"
 
 [dependencies]
