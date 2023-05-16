@@ -8,6 +8,8 @@ use bootloader_api::BootInfo;
 bootloader_api::entry_point!(kernel_main);
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
+    yuki_os_lib::init();
+
     if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
         let mut value = 0x90;
         for byte in framebuffer.buffer_mut() {
@@ -15,7 +17,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             value = value.wrapping_add(1);
         }
     }
-    loop {}
+    yuki_os_lib::hlt_loop();
 }
 
 /// This function is called on panic.
