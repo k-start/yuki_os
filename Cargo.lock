@@ -446,7 +446,10 @@ version = "0.1.0"
 dependencies = [
  "bootloader_api",
  "lazy_static",
- "spin",
+ "pc-keyboard",
+ "pic8259",
+ "spin 0.9.8",
+ "uart_16550",
  "x86_64",
 ]
 
@@ -456,7 +459,7 @@ version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 dependencies = [
- "spin",
+ "spin 0.5.2",
 ]
 
 [[package]]
@@ -476,6 +479,16 @@ name = "llvm-tools"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "955be5d0ca0465caf127165acb47964f911e2bc26073e865deb8be7189302faf"
+
+[[package]]
+name = "lock_api"
+version = "0.4.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "435011366fe56583b16cf956f9df0095b405b82d76425bc8981c0e22e60ec4df"
+dependencies = [
+ "autocfg",
+ "scopeguard",
+]
 
 [[package]]
 name = "log"
@@ -516,6 +529,21 @@ name = "parking"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14f2252c834a40ed9bb5422029649578e63aa341ac401f74e719dd1afda8394e"
+
+[[package]]
+name = "pc-keyboard"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed089a1fbffe3337a1a345501c981f1eb1e47e69de5a40e852433e12953c3174"
+
+[[package]]
+name = "pic8259"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb844b5b01db1e0b17938685738f113bfc903846f18932b378bc0eabfa40e194"
+dependencies = [
+ "x86_64",
+]
 
 [[package]]
 name = "pin-project"
@@ -625,6 +653,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f91339c0467de62360649f8d3e185ca8de4224ff281f66000de5eb2a77a79041"
 
 [[package]]
+name = "scopeguard"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
+
+[[package]]
 name = "serde"
 version = "1.0.163"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -709,6 +743,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
+name = "spin"
+version = "0.9.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
+
+[[package]]
 name = "syn"
 version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -756,6 +799,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "uart_16550"
+version = "0.2.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b074eb9300ad949edd74c529c0e8d451625af71bb948e6b65fe69f72dc1363d9"
+dependencies = [
+ "bitflags",
+ "rustversion",
+ "x86_64",
 ]
 
 [[package]]

@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 
+#[macro_use]
+pub mod print;
+
 use core::panic::PanicInfo;
 
 use bootloader_api::BootInfo;
@@ -22,6 +25,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
 /// This function is called on panic.
 #[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+fn panic(info: &PanicInfo) -> ! {
+    println!("{}", info);
+    yuki_os_lib::hlt_loop();
 }

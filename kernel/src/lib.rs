@@ -12,6 +12,8 @@ pub fn init() {
 
     gdt::init();
     interrupts::init_idt();
+    unsafe { interrupts::PICS.lock().initialize() };
+    x86_64::instructions::interrupts::enable();
 }
 
 pub fn outb(port: u16, val: u8) {

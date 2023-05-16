@@ -1,32 +1,13 @@
-use core::fmt;
 use lazy_static::lazy_static;
 use spin::Mutex;
+use uart_16550::SerialPort;
 
 lazy_static! {
-    pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer { port: 0x3F8 });
-}
-
-pub struct Writer {
-    port: u16,
-}
-
-impl fmt::Write for Writer {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        self.write_string(s);
-        Ok(())
-    }
-}
-
-impl Writer {
-    pub fn write_byte(&mut self, byte: u8) {
-        crate::outb(self.port, byte);
-    }
-
-    pub fn write_string(&mut self, s: &str) {
-        for byte in s.bytes() {
-            self.write_byte(byte);
-        }
-    }
+    pub static ref SERIAL1: Mutex<SerialPort> = {
+        let mut serial_port = unsafe { SerialPort::new(0x3F8) };
+        serial_port.init();
+        Mutex::new(serial_port)
+    };
 }
 
 #[macro_export]
@@ -41,11 +22,14 @@ macro_rules! println {
 }
 
 #[doc(hidden)]
-pub fn _print(args: fmt::Arguments) {
+pub fn _print(args: ::core::fmt::Arguments) {
     use core::fmt::Write;
     use x86_64::instructions::interrupts;
 
     interrupts::without_interrupts(|| {
-        WRITER.lock().write_fmt(args).unwrap();
+        SERIAL1
+            .lock()
+            .write_fmt(args)
+            .expect("Printing to serial failed");
     });
 }
