@@ -15,13 +15,17 @@ name = "yuki_os_lib"
 path = "src/lib.rs"
 
 [dependencies]
-bootloader_api = "0.11.2"
+bootloader_api = "0.11.3"
 x86_64 = "0.14.10"
 spin = "0.9.8"
 pic8259 = "0.10.4"
 uart_16550 = "0.2.18"
 pc-keyboard = "0.7.0"
+linked_list_allocator = "0.9.0"
 
 [dependencies.lazy_static]
 version = "1.0"
 features = ["spin_no_std"]
+
+[unstable]
+build-std = ["core", "compiler_builtins", "alloc"]

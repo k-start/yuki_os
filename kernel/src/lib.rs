@@ -1,15 +1,17 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
+#![feature(const_mut_refs)]
 
 #[macro_use]
 pub mod print;
 
 pub mod gdt;
 pub mod interrupts;
+pub mod memory;
+
+extern crate alloc;
 
 pub fn init() {
-    println!("Yuki OS");
-
     gdt::init();
     interrupts::init_idt();
     unsafe { interrupts::PICS.lock().initialize() };
