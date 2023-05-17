@@ -8,6 +8,7 @@ use bootloader_api::BootInfo;
 pub mod print;
 
 pub mod ata;
+pub mod fs;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;

@@ -21,14 +21,14 @@ enum Command {
 #[allow(dead_code)]
 #[repr(usize)]
 enum Status {
-    ERR = 0,
-    IDX = 1,
-    CORR = 2,
-    DRQ = 3,
-    SRV = 4,
-    DF = 5,
-    RDY = 6,
-    BSY = 7,
+    Err = 0,
+    Idx = 1,
+    Corr = 2,
+    Drq = 3,
+    Srv = 4,
+    Df = 5,
+    Rdy = 6,
+    Bsy = 7,
 }
 
 #[allow(dead_code)]
@@ -52,7 +52,7 @@ impl Bus {
     pub fn new(base_port: u16) -> Bus {
         Bus {
             bus: base_port,
-            data_register: Port::new(base_port + 0),
+            data_register: Port::new(base_port),
             error_register: PortReadOnly::new(base_port + 1),
             features_register: PortWriteOnly::new(base_port + 1),
             sector_count_register: Port::new(base_port + 2),
@@ -134,7 +134,7 @@ impl Bus {
         self.write_command(Command::Write);
         self.wait_ready();
         for i in 0..256 {
-            let mut data = 0 as u16;
+            let mut data = 0;
             data.set_bits(0..8, buf[i * 2] as u16);
             data.set_bits(8..16, buf[i * 2 + 1] as u16);
             self.write_data(data);
@@ -185,7 +185,7 @@ impl Bus {
     }
 
     fn is_busy(&mut self) -> bool {
-        self.status().get_bit(Status::BSY as usize)
+        self.status().get_bit(Status::Bsy as usize)
     }
 
     fn status(&mut self) -> u8 {
@@ -217,12 +217,12 @@ pub fn init() {
     }
 }
 
-pub fn read(bus: u8, block: u32, mut buf: &mut [u8]) {
+pub fn read(bus: u8, block: u32, buf: &mut [u8]) {
     let mut buses = BUSES.lock();
-    buses[bus as usize].read(block, &mut buf);
+    buses[bus as usize].read(block, buf);
 }
 
 pub fn write(bus: u8, block: u32, buf: &[u8]) {
     let mut buses = BUSES.lock();
-    buses[bus as usize].write(block, &buf);
+    buses[bus as usize].write(block, buf);
 }
