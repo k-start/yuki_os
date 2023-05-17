@@ -13,6 +13,9 @@ pub fn init(physical_memory_offset: Option<u64>, memory_regions: &'static Memory
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(memory_regions) };
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+
+    let total_mem: u64 = memory_regions.into_iter().map(|x| x.end - x.start).sum();
+    println!("Ram detected: {}MB", total_mem / 1024 / 1024 + 1);
 }
 
 /// Initialize a new OffsetPageTable.
