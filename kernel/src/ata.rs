@@ -87,31 +87,20 @@ impl Bus {
 
         self.wait_ready();
 
-        let mut buf: [u16; 256] = [0; 256];
+        let mut buf: [u8; 512] = [0; 512];
 
         for i in 0..256 {
             unsafe {
-                buf[i] = self.data_register.read();
+                let short: u16 = self.data_register.read();
+                // buf[i] = self.data_register.read();
+                buf[i * 2] = short.to_be_bytes()[0];
+                buf[i * 2 + 1] = short.to_be_bytes()[1];
             }
         }
 
-        let mut model = String::new();
-        for i in 27..47 {
-            for &b in &buf[i].to_be_bytes() {
-                model.push(b as char);
-            }
-        }
-        model = model.trim().into();
-
-        let mut serial = String::new();
-        for i in 10..20 {
-            for &b in &buf[i].to_be_bytes() {
-                serial.push(b as char);
-            }
-        }
-        serial = serial.trim().into();
-
-        let sectors = (buf[61] as u32) << 16 | (buf[60] as u32);
+        let model = String::from_utf8_lossy(&buf[54..94]).trim().into();
+        let serial = String::from_utf8_lossy(&buf[20..40]).trim().into();
+        let sectors = u32::from_be_bytes(buf[120..124].try_into().unwrap()).rotate_left(16);
 
         println!("[ATA] Device - {}", model);
         println!("[ATA] Serial - {}", serial);
