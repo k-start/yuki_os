@@ -2,6 +2,8 @@
 #![feature(abi_x86_interrupt)]
 #![feature(const_mut_refs)]
 
+use bootloader_api::BootInfo;
+
 #[macro_use]
 pub mod print;
 
@@ -11,11 +13,13 @@ pub mod memory;
 
 extern crate alloc;
 
-pub fn init() {
+pub fn init(boot_info: &'static mut BootInfo) {
     gdt::init();
-    interrupts::init_idt();
-    unsafe { interrupts::PICS.lock().initialize() };
-    x86_64::instructions::interrupts::enable();
+    interrupts::init();
+    memory::init(
+        boot_info.physical_memory_offset.into_option(),
+        &boot_info.memory_regions,
+    );
 }
 
 pub fn outb(port: u16, val: u8) {
