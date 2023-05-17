@@ -7,6 +7,7 @@ use bootloader_api::BootInfo;
 #[macro_use]
 pub mod print;
 
+pub mod ata;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;
@@ -20,6 +21,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
         boot_info.physical_memory_offset.into_option(),
         &boot_info.memory_regions,
     );
+    ata::init();
 }
 
 pub fn outb(port: u16, val: u8) {

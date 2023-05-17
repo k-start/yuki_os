@@ -444,6 +444,7 @@ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 name = "kernel"
 version = "0.1.0"
 dependencies = [
+ "bit_field",
  "bootloader_api",
  "lazy_static",
  "linked_list_allocator",
