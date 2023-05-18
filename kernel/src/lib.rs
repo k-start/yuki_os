@@ -24,10 +24,10 @@ pub fn init(boot_info: &'static mut BootInfo) {
     );
     ata::init();
 
-    let device = fs::ata_wrapper::AtaWrapper::new(0);
-    let cont = fat32::volume::Volume::new(device);
-    let mut root = cont.root_dir();
-    root.create_file("test.txt").unwrap();
+    // let device = fs::ata_wrapper::AtaWrapper::new(0);
+    // let cont = fat32::volume::Volume::new(device);
+    // let mut root = cont.root_dir();
+    // root.create_file("test2.txt").unwrap();
 }
 
 pub fn outb(port: u16, val: u8) {

@@ -20,10 +20,17 @@ impl BlockDevice for AtaWrapper {
         address: usize,
         number_of_blocks: usize,
     ) -> Result<(), Self::Error> {
-        if number_of_blocks == 1 {
-            crate::ata::read(self.ata_bus as u8, address as u32 / 512, buf);
-        } else {
-            return Err(Error::ReadError);
+        for i in 0..number_of_blocks {
+            let mut buf_2: [u8; 512] = [0; 512];
+            crate::ata::read(
+                self.ata_bus as u8,
+                address as u32 / 512 + i as u32,
+                &mut buf_2,
+            );
+
+            for j in 0..512 {
+                buf[(i * 512) + j] = buf_2[j];
+            }
         }
         Ok(())
     }
@@ -34,10 +41,12 @@ impl BlockDevice for AtaWrapper {
         address: usize,
         number_of_blocks: usize,
     ) -> Result<(), Self::Error> {
-        if number_of_blocks == 1 {
-            crate::ata::write(self.ata_bus as u8, address as u32 / 512, buf);
-        } else {
-            return Err(Error::WriteError);
+        for i in 0..number_of_blocks {
+            crate::ata::write(
+                self.ata_bus as u8,
+                address as u32 / 512,
+                &buf[i * 512..(i + 1) * 512],
+            );
         }
         Ok(())
     }
