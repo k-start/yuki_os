@@ -87,7 +87,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
         }
     }
 
-    jmp_to_usermode(userspace_fn_virt, VirtAddr::new(0x401000));
+    jmp_to_usermode(userspace_fn_virt, VirtAddr::new(0x801000));
 
     // println!("{userspace_fn_virt:?}");
 

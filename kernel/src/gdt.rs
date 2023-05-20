@@ -62,7 +62,7 @@ struct Selectors {
 }
 
 pub fn init() {
-    use x86_64::instructions::segmentation::{Segment, CS, DS, SS};
+    use x86_64::instructions::segmentation::{CS, DS, SS};
     use x86_64::instructions::tables::load_tss;
 
     GDT.0.load();
@@ -81,15 +81,9 @@ pub fn get_usermode_segments() -> (SegmentSelector, SegmentSelector) {
 #[inline(always)]
 pub unsafe fn set_usermode_segments() -> (u16, u16) {
     // set ds and tss, return cs and ds
-    let (mut cs, mut ds, mut tss) = (
-        GDT.1.user_code_selector,
-        GDT.1.user_data_selector,
-        GDT.1.tss_selector,
-    );
+    let (mut cs, mut ds) = (GDT.1.user_code_selector, GDT.1.user_data_selector);
     cs.0 |= PrivilegeLevel::Ring3 as u16;
     ds.0 |= PrivilegeLevel::Ring3 as u16;
-    tss.0 |= PrivilegeLevel::Ring3 as u16;
     x86_64::instructions::segmentation::DS::set_reg(ds);
-    // x86_64::instructions::tables::load_tss(tss);
     (cs.0, ds.0)
 }
