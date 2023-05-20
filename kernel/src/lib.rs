@@ -128,11 +128,6 @@ pub fn init(boot_info: &'static mut BootInfo) {
         // .expect("Could not allocate memory");
 
         (*task_pt).map_virt_to_phys(
-            pagetable::VirtAddr::new(userspace_fn_virt_base - 0x1000),
-            pagetable::PhysAddr::new(page_phys_start - 0x1000),
-            pagetable::BIT_PRESENT | pagetable::BIT_WRITABLE | pagetable::BIT_USER,
-        ); // map the program's code
-        (*task_pt).map_virt_to_phys(
             pagetable::VirtAddr::new(userspace_fn_virt_base),
             pagetable::PhysAddr::new(page_phys_start),
             pagetable::BIT_PRESENT | pagetable::BIT_WRITABLE | pagetable::BIT_USER,
@@ -204,7 +199,7 @@ pub unsafe fn userspace_prog_1() {
     mov rsi, 20
     mov rdx, 30
     mov r10, 40
-    // syscall
+    syscall
     jmp start
 "
     );
