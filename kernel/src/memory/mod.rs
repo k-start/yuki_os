@@ -207,30 +207,6 @@ pub fn active_pagetable_physaddr() -> u64 {
     physaddr
 }
 
-pub fn allocate_pages_mapper(
-    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-    mapper: &mut impl Mapper<Size4KiB>,
-    start_addr: VirtAddr,
-    size: u64,
-    flags: PageTableFlags,
-) -> Result<(), MapToError<Size4KiB>> {
-    let page_range = {
-        let end_addr = start_addr + size - 1u64;
-        let start_page = Page::containing_address(start_addr);
-        let end_page = Page::containing_address(end_addr);
-        Page::range_inclusive(start_page, end_page)
-    };
-
-    for page in page_range {
-        let frame = frame_allocator
-            .allocate_frame()
-            .ok_or(MapToError::FrameAllocationFailed)?;
-        unsafe { mapper.map_to(page, frame, flags, frame_allocator)?.flush() };
-    }
-
-    Ok(())
-}
-
 pub fn allocate_pages(
     level_4_table: *mut PageTable,
     start_addr: VirtAddr,
@@ -242,13 +218,26 @@ pub fn allocate_pages(
     let mut mapper =
         unsafe { OffsetPageTable::new(&mut *level_4_table, memory_info.phys_mem_offset) };
 
-    allocate_pages_mapper(
-        &mut memory_info.frame_allocator,
-        &mut mapper,
-        start_addr,
-        size,
-        flags,
-    )
+    let page_range = {
+        let end_addr = start_addr + size - 1u64;
+        let start_page = Page::containing_address(start_addr);
+        let end_page = Page::containing_address(end_addr);
+        Page::range_inclusive(start_page, end_page)
+    };
+
+    for page in page_range {
+        let frame = memory_info
+            .frame_allocator
+            .allocate_frame()
+            .ok_or(MapToError::FrameAllocationFailed)?;
+        unsafe {
+            mapper
+                .map_to(page, frame, flags, &mut memory_info.frame_allocator)?
+                .flush()
+        };
+    }
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------

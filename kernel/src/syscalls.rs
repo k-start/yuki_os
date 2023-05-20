@@ -12,27 +12,22 @@ pub fn init() {
     unsafe {
         asm!("mov ecx, 0xC0000080", "rdmsr", "or eax, 1", "wrmsr");
 
-        // write segments to use on syscall/sysret to AMD'S MSR_STAR register
-        // asm!(
-        //     "xor rax, rax",
-        //     "mov rdx, 0x230008", // use seg selectors 8, 16 for syscall and 43, 51 for sysret
-        //     "wrmsr",
-        //     in("rcx") MSR_STAR);
-
-        // asm!("\
-        // xor rdx, rdx
-        // mov rax, 0x200
-        // wrmsr", in("rcx") MSR_FMASK, out("rdx") _);
+        asm!("xor rdx, rdx",
+             "mov rax, 0x300",
+             "wrmsr",
+             in("rcx") MSR_FMASK);
         // write handler address to AMD's MSR_LSTAR register
-        asm!("\
-        mov rdx, rax
-        shr rdx, 32
-        wrmsr", in("rax") handler_addr, in("rcx") MSR_LSTAR, out("rdx") _);
+        asm!("mov rdx, rax",
+             "shr rdx, 32",
+             "wrmsr",
+             in("rax") handler_addr,
+             in("rcx") MSR_LSTAR);
         // write segments to use on syscall/sysret to AMD'S MSR_STAR register
-        asm!("\
-        xor rax, rax
-        mov rdx, 0x230008 // use seg selectors 8, 16 for syscall and 43, 51 for sysret
-        wrmsr", in("rcx") MSR_STAR, out("rax") _, out("rdx") _);
+        asm!(
+            "xor rax, rax",
+            "mov rdx, 0x230008", // use seg selectors 8, 16 for syscall and 43, 51 for sysret
+            "wrmsr",
+            in("rcx") MSR_STAR);
     }
 }
 
