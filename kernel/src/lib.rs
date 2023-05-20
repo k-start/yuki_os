@@ -153,13 +153,18 @@ pub fn jmp_to_usermode(code: VirtAddr, stack_end: VirtAddr) {
         let (cs_idx, ds_idx) = gdt::set_usermode_segments();
         x86_64::instructions::tlb::flush_all(); // flush the TLB after address-space switch
 
-        core::arch::asm!("\
-        push rax   // stack segment
-        push rsi   // rsp
-        push 0x200 // rflags (only interrupt bit set)
-        push rdx   // code segment
-        push rdi   // ret to virtual addr
-        iretq",
-        in("rdi") code.as_u64(), in("rsi") stack_end.as_u64(), in("dx") cs_idx, in("ax") ds_idx);
+        core::arch::asm!(
+            "cli",        // Disable interrupts
+            "push {:r}",  // Stack segment (SS)
+            "push {:r}",  // Stack pointer (RSP)
+            "push 0x200", // RFLAGS with interrupts enabled
+            "push {:r}",  // Code segment (CS)
+            "push {:r}",  // Instruction pointer (RIP)
+            "iretq",
+            in(reg) ds_idx,
+            in(reg) stack_end.as_u64(),
+            in(reg) cs_idx,
+            in(reg) code.as_u64(),
+        );
     }
 }
