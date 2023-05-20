@@ -9,7 +9,7 @@ fn main() {
     qemu.arg(format!("format=raw,file={}", env!("UEFI_IMAGE")));
     qemu.arg("-bios").arg(ovmf_prebuilt::ovmf_pure_efi());
     qemu.arg("-serial");
-    qemu.arg("stdio");
+    qemu.arg("mon:stdio");
     let exit_status = qemu.status().unwrap();
     process::exit(exit_status.code().unwrap_or(-1));
 }
