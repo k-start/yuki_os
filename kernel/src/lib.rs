@@ -1,6 +1,7 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
 #![feature(const_mut_refs)]
+#![feature(naked_functions)]
 
 use bootloader_api::BootInfo;
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};

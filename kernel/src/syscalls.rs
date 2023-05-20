@@ -7,7 +7,7 @@ const MSR_LSTAR: usize = 0xc0000082;
 const MSR_FMASK: usize = 0xc0000084;
 
 pub fn init() {
-    let handler_addr = handle_syscall as *const () as u64;
+    let handler_addr = wrapped_syscall_handler as *const () as u64;
 
     unsafe {
         asm!("mov ecx, 0xC0000080", "rdmsr", "or eax, 1", "wrmsr");
@@ -31,85 +31,44 @@ pub fn init() {
     }
 }
 
+// Saves all registers to stack
+macro_rules! wrap {
+    ($fn: ident => $w:ident) => {
+        #[naked]
+        pub unsafe extern "sysv64" fn $w() {
+            asm!(
+                "push rax",
+                "push rcx",
+                "push rdx",
+                "push rsi",
+                "push rdi",
+                "push r8",
+                "push r9",
+                "push r10",
+                "push r11",
+                "mov rsi, rsp", // Arg #2: register list
+                "mov rdi, rsp", // Arg #1: interupt frame
+                "add rdi, 9 * 8",
+                "call {}",
+                "pop r11",
+                "pop r10",
+                "pop r9",
+                "pop r8",
+                "pop rdi",
+                "pop rsi",
+                "pop rdx",
+                "pop rcx",
+                "pop rax",
+                "sysretq",
+                sym $fn,
+                options(noreturn)
+            );
+        }
+    };
+}
+
+wrap!(handle_syscall => wrapped_syscall_handler);
+
 fn handle_syscall() {
-    unsafe {
-        asm!("push rcx; push r11; sub rsp, 0x400");
-    }
     println!("syscall");
-    unsafe {
-        asm!("add rsp, 0x400; pop r11; pop rcx; sysretq");
-    }
-    // println!("syscall");
-    // unsafe {
-    //     asm!(
-    //         "\
-    //     push rcx // backup registers for sysretq
-    //     push r11
-    //     push rbp // save callee-saved registers
-    //     push rbx
-    //     push r12
-    //     push r13
-    //     push r14
-    //     push r15
-    //     mov rbp, rsp // save rsp
-    //     sub rsp, 0x400 // make some room in the stack
-    //     push rax // backup syscall params while we get some stack space
-    //     push rdi
-    //     push rsi
-    //     push rdx
-    //     push r10"
-    //     );
-    // }
-    // let syscall_stack: Vec<u8> = Vec::with_capacity(0x10000);
-    // let stack_ptr = syscall_stack.as_ptr();
-    // unsafe {
-    //     asm!(
-    //         "\
-    //     pop r10 // restore syscall params to their registers
-    //     pop rdx
-    //     pop rsi
-    //     pop rdi
-    //     pop rax
-    //     mov rsp, rbx // move our stack to the newly allocated one
-    //     sti // enable interrupts"
-    //     );
-    //     // inout("rbx") stack_ptr => _);
-    // }
-    // let syscall: u64;
-    // let arg0: u64;
-    // let arg1: u64;
-    // let arg2: u64;
-    // let arg3: u64;
-    // unsafe {
-    //     // move the syscall arguments from registers to variables
-    //     asm!("nop",
-    //     out("rax") syscall, out("rdi") arg0, out("rsi") arg1, out("rdx") arg2, out("r10") arg3);
-    // }
-    // // println!("Syscall");
-    // let retval: i64 = 0;
-    // unsafe {
-    //     asm!("\
-    //     mov rbx, {} // save return value into rbx so that it's maintained through free
-    //     cli",
-    //     in(reg) retval // disable interrupts while restoring the stack
-    //     );
-    // }
-    // drop(syscall_stack); // we can now drop the syscall temp stack
-    // unsafe {
-    //     asm!(
-    //         "\
-    //     mov rax, rbx // restore syscall return value from rbx to rax
-    //     mov rsp, rbp // restore rsp from rbp
-    //     pop r15 // restore callee-saved registers
-    //     pop r14
-    //     pop r13
-    //     pop r12
-    //     pop rbx
-    //     pop rbp // restore stack and registers for sysretq
-    //     pop r11
-    //     pop rcx
-    //     sysretq // back to userland",
-    //         options(noreturn)
-    //     );
-    // }
 }
