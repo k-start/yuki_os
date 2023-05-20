@@ -12,7 +12,7 @@ fn main() {
     // qemu.arg("-d");
     // qemu.arg("cpu_reset");
     qemu.arg("-serial");
-    qemu.arg("stdio");
+    qemu.arg("mon:stdio");
     // qemu.arg("-monitor");
     // qemu.arg("stdio");
     let exit_status = qemu.status().unwrap();

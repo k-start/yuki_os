@@ -260,7 +260,7 @@ impl VirtAddr {
             return Some((pte.phys_addr().offset(page_off), &*pte));
         }
 
-        let pte = active_level_4_table().get_entry(p4_off as usize);
+        // let pte = active_level_4_table().get_entry(p4_off as usize);
     }
 
     pub fn addr(&self) -> u64 {
