@@ -1,9 +1,7 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
 #![feature(const_mut_refs)]
-#![feature(asm)]
 
-use alloc::vec::Vec;
 use bootloader_api::BootInfo;
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
@@ -15,7 +13,6 @@ pub mod fs;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;
-pub mod pagetable;
 pub mod syscalls;
 
 extern crate alloc;
@@ -88,74 +85,6 @@ pub fn init(boot_info: &'static mut BootInfo) {
     }
 
     jmp_to_usermode(userspace_fn_virt, VirtAddr::new(0x801000));
-
-    // println!("{userspace_fn_virt:?}");
-
-    // unsafe {
-    //     // let memory_info = memory::MEMORY_INFO.as_mut().unwrap();
-    //     // let userspace_fn_1_in_kernel = VirtAddr::new(userspace_prog_1 as *const () as u64);
-    //     // let userspace_fn_phys =
-    //     // memory::translate_addr(userspace_fn_1_in_kernel, memory_info.phys_mem_offset).unwrap();
-    //     let userspace_fn_1_in_kernel =
-    //         pagetable::VirtAddr::new(userspace_prog_1 as *const () as u64);
-    //     let userspace_fn_phys = userspace_fn_1_in_kernel.to_phys().unwrap().0; // virtual address to physical
-    //     let page_phys_start = (userspace_fn_phys.addr() >> 12) << 12; // zero out page offset to get which page we should map
-    //     let fn_page_offset = userspace_fn_phys.addr() - page_phys_start; // offset of function from page start
-    //     let userspace_fn_virt_base = 0x400000; // target virtual address of page
-    //     let userspace_fn_virt = userspace_fn_virt_base + fn_page_offset; // target virtual address of function
-    //     println!(
-    //         "Mapping {:x} to {:x}",
-    //         page_phys_start, userspace_fn_virt_base
-    //     );
-    //     // let mut task_pt = pagetable::PageTable::new(); // copy over the kernel's page tables
-    //     let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
-
-    //     let task_pt = user_page_table_ptr as *mut pagetable::PageTable;
-
-    //     memory::allocate_pages(
-    //         user_page_table_ptr,
-    //         VirtAddr::new(userspace_fn_virt_base),
-    //         0x20000 as u64, // Size (bytes)
-    //         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-    //     )
-    //     .expect("Could not allocate memory");
-
-    //     // memory::allocate_pages(
-    //     //     user_page_table_ptr,
-    //     //     VirtAddr::new(0x800000),
-    //     //     0x20000 as u64, // Size (bytes)
-    //     //     PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-    //     // )
-    //     // .expect("Could not allocate memory");
-
-    //     (*task_pt).map_virt_to_phys(
-    //         pagetable::VirtAddr::new(userspace_fn_virt_base),
-    //         pagetable::PhysAddr::new(page_phys_start),
-    //         pagetable::BIT_PRESENT | pagetable::BIT_WRITABLE | pagetable::BIT_USER,
-    //     ); // map the program's code
-    //     (*task_pt).map_virt_to_phys(
-    //         pagetable::VirtAddr::new(userspace_fn_virt_base).offset(0x1000),
-    //         pagetable::PhysAddr::new(page_phys_start).offset(0x1000),
-    //         pagetable::BIT_PRESENT | pagetable::BIT_WRITABLE | pagetable::BIT_USER,
-    //     ); // also map another page to be sure we got the entire function in
-    //     let mut stack_space: Vec<u8> = Vec::with_capacity(0x1000); // allocate some memory to use for the stack
-    //     let stack_space_phys =
-    //         pagetable::VirtAddr::new(stack_space.as_mut_ptr() as *const u8 as u64)
-    //             .to_phys()
-    //             .unwrap()
-    //             .0;
-    //     // take physical address of stack
-    //     (*task_pt).map_virt_to_phys(
-    //         pagetable::VirtAddr::new(0x800000),
-    //         stack_space_phys,
-    //         pagetable::BIT_PRESENT | pagetable::BIT_WRITABLE | pagetable::BIT_USER,
-    //     ); // map the stack memory to 0x800000
-
-    //     memory::switch_to_pagetable(user_page_table_physaddr);
-    //     // println!("{:?}", task_pt);
-    //     // (*task_pt).enable();
-    //     jmp_to_usermode(VirtAddr::new(userspace_fn_virt), VirtAddr::new(0x403000));
-    // }
 }
 
 pub fn outb(port: u16, val: u8) {
