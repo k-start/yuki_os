@@ -1,6 +1,7 @@
 use core::arch::asm;
 
 use alloc::vec::Vec;
+use x86_64::{structures::idt::InterruptStackFrame, VirtAddr};
 
 const MSR_STAR: usize = 0xc0000081;
 const MSR_LSTAR: usize = 0xc0000082;
@@ -69,6 +70,28 @@ macro_rules! wrap {
 
 wrap!(handle_syscall => wrapped_syscall_handler);
 
-fn handle_syscall() {
-    println!("syscall");
+#[repr(align(8), C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Registers {
+    pub r11: usize,
+    pub r10: usize,
+    pub r9: usize,
+    pub r8: usize,
+    pub rdi: usize,
+    pub rsi: usize,
+    pub rdx: usize,
+    pub rcx: usize,
+    pub rax: usize,
+}
+
+fn handle_syscall(stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
+    // println!("syscall {:?} {:?}", stack_frame, regs);
+    unsafe {
+        let slice: &[u8] =
+            core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx);
+
+        let string = core::str::from_utf8(slice).unwrap();
+        println!("{string}");
+    }
+    regs.rax = 0;
 }

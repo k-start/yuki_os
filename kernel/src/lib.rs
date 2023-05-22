@@ -122,19 +122,24 @@ pub fn hlt_loop() -> ! {
 #[allow(named_asm_labels)]
 #[inline(always)]
 pub unsafe fn userspace_prog_1() {
+    let test = [b't', b'e', b's', b't'];
+    let ptr = &test[0] as *const u8;
     core::arch::asm!(
-        "\
-    start:
-    mov rax, 0xCA11
-    mov rdi, 10
-    mov rsi, 20
-    mov rdx, 30
-    mov r10, 40
-    syscall
-    jmp start
-"
+        "start:",
+        "mov rax, 1",
+        "mov rdi, 1",
+        "syscall",
+        "jmp start",
+        in("rsi") ptr,
+        in("rdx") test.len()
     );
 }
+
+// mov rax,1 ; the (new) system call number of "write".
+// mov rdi,1 ; first parameter: 1, the stdout file descriptor
+// mov rsi,myStr ; data to write
+// mov rdx,3 ; bytes to write
+// syscall ; Issue the system call
 
 // #[allow(named_asm_labels)]
 // #[inline(always)]
