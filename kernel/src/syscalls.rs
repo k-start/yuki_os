@@ -1,6 +1,5 @@
 use core::arch::asm;
 
-use alloc::vec::Vec;
 use x86_64::{structures::idt::InterruptStackFrame, VirtAddr};
 
 const MSR_STAR: usize = 0xc0000081;
@@ -84,7 +83,7 @@ pub struct Registers {
     pub rax: usize,
 }
 
-fn handle_syscall(stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
+fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
     // println!("syscall {:?} {:?}", stack_frame, regs);
     unsafe {
         let slice: &[u8] =

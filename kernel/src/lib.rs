@@ -4,6 +4,7 @@
 #![feature(naked_functions)]
 
 use bootloader_api::BootInfo;
+use object::{Object, ObjectSegment};
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 #[macro_use]
@@ -28,64 +29,81 @@ pub fn init(boot_info: &'static mut BootInfo) {
     ata::init();
     syscalls::init();
 
-    // let device = fs::ata_wrapper::AtaWrapper::new(0);
-    // let cont = fat32::volume::Volume::new(device);
-    // let mut root = cont.root_dir();
-    // root.create_file("test2.txt").unwrap();
+    // println!("{},{},{},{},{}", b'F', b'A', b'T', b'3', b'2');
 
-    let memory_info = unsafe { memory::MEMORY_INFO.as_mut().unwrap() };
+    // for i in 0..10000 {
+    //     let mut buf: [u8; 512] = [0; 512];
+    //     ata::read(0, i, &mut buf);
+    //     for j in buf {
+    //         if j == b'F' {
+    //             println!("{i} - {:?}", buf);
+    //             break;
+    //         }
+    //     }
+    // }
 
-    let userspace_fn_1_in_kernel = VirtAddr::new(userspace_prog_1 as *const () as u64);
-    let userspace_fn_phys = unsafe {
-        memory::translate_addr(userspace_fn_1_in_kernel, memory_info.phys_mem_offset).unwrap()
-    };
-    let page_phys_start = (userspace_fn_phys.as_u64() >> 12) << 12;
-    let fn_page_offset = userspace_fn_phys.as_u64() - page_phys_start;
-    let userspace_fn_virt_base = 0x400000;
-    let userspace_fn_virt = VirtAddr::new(userspace_fn_virt_base + fn_page_offset);
-    println!("{:?}", userspace_fn_virt);
+    let device = fs::ata_wrapper::AtaWrapper::new(0);
+    let cont = fat32::volume::Volume::new(device);
+    let root = cont.root_dir();
+    let file = root.open_file("test-binary").unwrap();
 
-    println!(
-        "Mapping {:x} to {:x}",
-        page_phys_start, userspace_fn_virt_base
-    );
+    let mut file_buf: [u8; 0x2000] = [0; 0x2000];
+    let _size = file.read(&mut file_buf).unwrap();
 
-    let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
+    const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 
-    memory::allocate_pages(
-        user_page_table_ptr,
-        VirtAddr::new(userspace_fn_virt_base),
-        0x20000 as u64, // Size (bytes)
-        PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-    )
-    .expect("Could not allocate memory");
-
-    memory::allocate_pages(
-        user_page_table_ptr,
-        VirtAddr::new(0x800000),
-        0x20000 as u64, // Size (bytes)
-        PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-    )
-    .expect("Could not allocate memory");
-
-    memory::switch_to_pagetable(user_page_table_physaddr);
-
-    let input_ptr: *const u8 =
-        VirtAddr::new((userspace_fn_1_in_kernel.as_u64() >> 12) << 12).as_ptr();
-    let dest_ptr: *const u8 = VirtAddr::new(0x400000).as_ptr();
-    for i in 0..0x20000 {
-        unsafe {
-            let in_ptr = input_ptr.add(i);
-            let value = core::ptr::read_unaligned(in_ptr);
-
-            let out_ptr: *mut u8 = dest_ptr.add(i).cast_mut();
-            core::ptr::write(out_ptr, value);
-
-            // println!("{:?} {:?} {:?}", in_ptr, out_ptr, value);
-        }
+    if file_buf[0..4] != ELF_MAGIC {
+        panic!("Expected ELF binary");
     }
 
-    jmp_to_usermode(userspace_fn_virt, VirtAddr::new(0x801000));
+    if let Ok(obj) = object::File::parse(&file_buf[..]) {
+        // Mount app at 0x400000 in memory
+        let userspace_fn_virt_base = 0x400000;
+
+        let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
+
+        // user heap
+        memory::allocate_pages(
+            user_page_table_ptr,
+            VirtAddr::new(0x800000),
+            0x1000 as u64, // Size (bytes)
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+        )
+        .expect("Could not allocate memory");
+
+        // entry point + 0x400000
+        let entry_point = userspace_fn_virt_base + obj.entry();
+        for segment in obj.segments() {
+            // segment address + 0x400000
+            let segment_address = userspace_fn_virt_base + segment.address();
+            let start_address = VirtAddr::new(segment_address);
+
+            // allocate pages for the app
+            memory::allocate_pages(
+                user_page_table_ptr,
+                start_address,
+                segment.size() as u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .expect("Could not allocate memory");
+
+            memory::switch_to_pagetable(user_page_table_physaddr);
+
+            if let Ok(data) = segment.data() {
+                let dest_ptr = segment_address as *mut u8;
+                for (i, value) in data.iter().enumerate() {
+                    unsafe {
+                        let ptr = dest_ptr.add(i);
+                        core::ptr::write(ptr, *value);
+                    }
+                }
+            }
+        }
+
+        jmp_to_usermode(VirtAddr::new(entry_point), VirtAddr::new(0x801000));
+    }
 }
 
 pub fn outb(port: u16, val: u8) {
@@ -118,40 +136,6 @@ pub fn hlt_loop() -> ! {
         x86_64::instructions::hlt();
     }
 }
-
-#[allow(named_asm_labels)]
-#[inline(always)]
-pub unsafe fn userspace_prog_1() {
-    let test = [b't', b'e', b's', b't'];
-    let ptr = &test[0] as *const u8;
-    core::arch::asm!(
-        "start:",
-        "mov rax, 1",
-        "mov rdi, 1",
-        "syscall",
-        "jmp start",
-        in("rsi") ptr,
-        in("rdx") test.len()
-    );
-}
-
-// mov rax,1 ; the (new) system call number of "write".
-// mov rdi,1 ; first parameter: 1, the stdout file descriptor
-// mov rsi,myStr ; data to write
-// mov rdx,3 ; bytes to write
-// syscall ; Issue the system call
-
-// #[allow(named_asm_labels)]
-// #[inline(always)]
-// pub unsafe fn userspace_prog_1() {
-//     core::arch::asm!(
-//         "\
-//     nop
-//     nop
-//     nop
-// "
-//     );
-// }
 
 #[inline(never)]
 pub fn jmp_to_usermode(code: VirtAddr, stack_end: VirtAddr) {
