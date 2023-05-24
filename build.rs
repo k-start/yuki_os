@@ -55,20 +55,32 @@ fn main() {
     let fs = fatfs::FileSystem::new(img_file, fatfs::FsOptions::new()).unwrap();
     let root_dir = fs.root_dir();
 
-    // loop through all files and load them
-    let paths = fs::read_dir("user-drive/").unwrap();
+    // get all env vars for user binaries -kernel binary
+    let bin_vars: Vec<(String, String)> = env::vars()
+        .filter(|(x, _)| {
+            x.starts_with("CARGO_BIN_FILE_") && !x.starts_with("CARGO_BIN_FILE_KERNEL")
+        })
+        .collect();
 
-    for path in paths {
-        let os_str_filename = path.unwrap().file_name();
-        let filename = os_str_filename.to_str().unwrap();
-        println!("{filename}");
-        let mut file = root_dir.create_file(filename).unwrap();
+    // loop through binaries
+    // there are 2 env vars for each binary in format:
+    // CARGO_BIN_FILE_{BINARY_NAME}
+    // CARGO_BIN_FILE_{BINARY_NAME}_{binary_name}
+    // use this to get the true binary name in lowercase
+    for i in (0..bin_vars.len()).step_by(2) {
+        let var1 = bin_vars.get(i).unwrap();
+        let var2 = bin_vars.get(i + 1).unwrap();
+        let binary_path = var1.1.clone();
+        let binary_name = var2.0.replace(&format!("{}_", var1.0).to_string(), "");
 
-        let mut test_binary = File::open(format!("user-drive/{filename}")).unwrap();
+        // load binary and put it into the .img
+        let mut file_in_img: fatfs::File<File> = root_dir.create_file(&binary_name).unwrap();
+
+        let mut binary_file = File::open(binary_path).unwrap();
         let mut data: Vec<u8> = Vec::new();
-        let _ = test_binary.read_to_end(&mut data);
+        let _ = binary_file.read_to_end(&mut data);
 
-        file.write_all(&data).unwrap();
+        file_in_img.write_all(&data).unwrap();
     }
 
     // pass the disk image paths via environment variables

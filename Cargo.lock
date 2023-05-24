@@ -1253,4 +1253,5 @@ dependencies = [
  "fatfs",
  "kernel",
  "ovmf-prebuilt",
+ "test-binary",
 ]
