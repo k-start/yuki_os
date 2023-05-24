@@ -35,7 +35,10 @@ pub fn init() {
 macro_rules! wrap {
     ($fn: ident => $w:ident) => {
         #[naked]
-        pub unsafe extern "sysv64" fn $w() {
+        /// # Safety
+        ///
+        /// Just dont call the function directly thanks
+        unsafe extern "sysv64" fn $w() {
             asm!(
                 "push rax",
                 "push rcx",

@@ -63,13 +63,17 @@ pub fn init(boot_info: &'static mut BootInfo) {
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
         // user heap
-        memory::allocate_pages(
-            user_page_table_ptr,
-            VirtAddr::new(0x800000),
-            0x1000 as u64, // Size (bytes)
-            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-        )
-        .expect("Could not allocate memory");
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(0x800000),
+                0x1000_u64, // Size (bytes)
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .expect("Could not allocate memory");
+        }
 
         // entry point + 0x400000
         let entry_point = userspace_fn_virt_base + obj.entry();
@@ -79,15 +83,17 @@ pub fn init(boot_info: &'static mut BootInfo) {
             let start_address = VirtAddr::new(segment_address);
 
             // allocate pages for the app
-            memory::allocate_pages(
-                user_page_table_ptr,
-                start_address,
-                segment.size() as u64,
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate memory");
+            unsafe {
+                memory::allocate_pages(
+                    user_page_table_ptr,
+                    start_address,
+                    segment.size(),
+                    PageTableFlags::PRESENT
+                        | PageTableFlags::WRITABLE
+                        | PageTableFlags::USER_ACCESSIBLE,
+                )
+                .expect("Could not allocate memory");
+            }
 
             memory::switch_to_pagetable(user_page_table_physaddr);
 

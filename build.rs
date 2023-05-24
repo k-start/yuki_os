@@ -1,7 +1,7 @@
 use bootloader::DiskImageBuilder;
 use std::{
     env,
-    fs::{self, File},
+    fs::File,
     io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
@@ -39,7 +39,7 @@ fn main() {
             .unwrap();
 
         // format as fat32
-        let _format = fatfs::format_volume(
+        fatfs::format_volume(
             img_file,
             fatfs::FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat32),
         )

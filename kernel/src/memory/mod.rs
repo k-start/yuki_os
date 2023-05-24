@@ -38,11 +38,13 @@ pub fn init(physical_memory_offset: Option<u64>, memory_regions: &'static Memory
         })
     };
 
-    let total_mem: u64 = memory_regions.into_iter().map(|x| x.end - x.start).sum();
+    let total_mem: u64 = memory_regions.iter().map(|x| x.end - x.start).sum();
     println!("Ram detected: {}MB", total_mem / 1024 / 1024 + 1);
 }
 
 /// Initialize a new OffsetPageTable.
+///
+/// # Safety
 ///
 /// This function is unsafe because the caller must guarantee that the
 /// complete physical memory is mapped to virtual memory at the passed
@@ -54,6 +56,8 @@ pub unsafe fn init_page_table(physical_memory_offset: VirtAddr) -> OffsetPageTab
 }
 
 /// Returns a mutable reference to the active level 4 table.
+///
+/// # Safety
 ///
 /// This function is unsafe because the caller must guarantee that the
 /// complete physical memory is mapped to virtual memory at the passed
@@ -106,7 +110,7 @@ fn translate_addr_inner(addr: VirtAddr, physical_memory_offset: VirtAddr) -> Opt
     Some(frame.start_address() + u64::from(addr.page_offset()))
 }
 
-pub unsafe fn translate_addr(addr: VirtAddr, physical_memory_offset: VirtAddr) -> Option<PhysAddr> {
+pub fn translate_addr(addr: VirtAddr, physical_memory_offset: VirtAddr) -> Option<PhysAddr> {
     translate_addr_inner(addr, physical_memory_offset)
 }
 
@@ -172,14 +176,14 @@ fn copy_pagetables(level_4_table: &PageTable) -> (*mut PageTable, u64) {
     let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
     copy_pages_rec(memory_info.phys_mem_offset, level_4_table, table, 4);
 
-    return (table_ptr, table_physaddr);
+    (table_ptr, table_physaddr)
 }
 
 pub fn create_new_user_pagetable() -> (*mut PageTable, u64) {
     let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
     // Copy kernel pages
     let (user_page_table_ptr, user_page_table_physaddr) =
-        copy_pagetables(&memory_info.kernel_l4_table);
+        copy_pagetables(memory_info.kernel_l4_table);
 
     (user_page_table_ptr, user_page_table_physaddr)
 }
@@ -207,7 +211,15 @@ pub fn active_pagetable_physaddr() -> u64 {
     physaddr
 }
 
-pub fn allocate_pages(
+/// Allocates pages in the level_4_table supplied
+///
+/// # Safety
+///
+/// This function is unsafe because the caller must guarantee that the
+/// passed `level_4_table` must point to the level 4 page table of a valid
+/// page table hierarchy. Otherwise this function might break memory safety,
+/// e.g. by writing to an illegal memory location.
+pub unsafe fn allocate_pages(
     level_4_table: *mut PageTable,
     start_addr: VirtAddr,
     size: u64,
@@ -259,6 +271,8 @@ pub struct BootInfoFrameAllocator {
 
 impl BootInfoFrameAllocator {
     /// Create a FrameAllocator from the passed memory map.
+    ///
+    /// # Safety
     ///
     /// This function is unsafe because the caller must guarantee that the passed
     /// memory map is valid. The main requirement is that all frames that are marked

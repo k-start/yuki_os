@@ -1,4 +1,6 @@
 use lazy_static::lazy_static;
+use x86_64::instructions::segmentation::{CS, DS, SS};
+use x86_64::instructions::tables::load_tss;
 use x86_64::registers::segmentation::Segment;
 use x86_64::structures::gdt::{
     Descriptor, DescriptorFlags, GlobalDescriptorTable, SegmentSelector,
@@ -25,24 +27,21 @@ lazy_static! {
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
             let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
-            let stack_end = stack_start + STACK_SIZE;
-            stack_end
+            stack_start + STACK_SIZE // stack_end
         };
         tss.interrupt_stack_table[GENERAL_PROTECTION_FAULT_IST_INDEX as usize] = {
             const STACK_SIZE: usize = 4096 * 5;
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
             let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
-            let stack_end = stack_start + STACK_SIZE;
-            stack_end
+            stack_start + STACK_SIZE // stack_end
         };
         tss.privilege_stack_table[0] = {
             const STACK_SIZE: usize = 4096 * 5;
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
             let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
-            let stack_end = stack_start + STACK_SIZE;
-            stack_end
+            stack_start + STACK_SIZE // stack_end
         };
         tss
     };
@@ -80,9 +79,6 @@ struct Selectors {
 }
 
 pub fn init() {
-    use x86_64::instructions::segmentation::{CS, DS, SS};
-    use x86_64::instructions::tables::load_tss;
-
     GDT.0.load();
     unsafe {
         CS::set_reg(GDT.1.code_selector);
@@ -97,11 +93,13 @@ pub fn get_usermode_segments() -> (SegmentSelector, SegmentSelector) {
 }
 
 #[inline(always)]
-pub unsafe fn set_usermode_segments() -> (u16, u16) {
+pub fn set_usermode_segments() -> (u16, u16) {
     // set ds and tss, return cs and ds
     let (mut cs, mut ds) = (GDT.1.user_code_selector, GDT.1.user_data_selector);
     cs.0 |= PrivilegeLevel::Ring3 as u16;
     ds.0 |= PrivilegeLevel::Ring3 as u16;
-    x86_64::instructions::segmentation::DS::set_reg(ds);
+    unsafe {
+        DS::set_reg(ds);
+    }
     (cs.0, ds.0)
 }
