@@ -93,7 +93,7 @@ fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) 
             core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx);
 
         let string = core::str::from_utf8(slice).unwrap();
-        println!("{string}");
+        print!("{string}");
     }
     regs.rax = 0;
 }

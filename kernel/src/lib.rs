@@ -4,13 +4,14 @@
 #![feature(naked_functions)]
 
 use bootloader_api::BootInfo;
-use object::{Object, ObjectSegment};
+use elfloader::ElfBinary;
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 #[macro_use]
 pub mod print;
 
 pub mod ata;
+pub mod elf;
 pub mod fs;
 pub mod gdt;
 pub mod interrupts;
@@ -47,69 +48,48 @@ pub fn init(boot_info: &'static mut BootInfo) {
     let root = cont.root_dir();
     let file = root.open_file("test-binary").unwrap();
 
-    let mut file_buf: [u8; 0x2000] = [0; 0x2000];
-    let _size = file.read(&mut file_buf).unwrap();
+    let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
-    const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
+    memory::switch_to_pagetable(user_page_table_physaddr);
 
-    if file_buf[0..4] != ELF_MAGIC {
-        panic!("Expected ELF binary");
+    unsafe {
+        memory::allocate_pages(
+            user_page_table_ptr,
+            VirtAddr::new(0x500000000000),
+            0x227000_u64, // Size (bytes)
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+        )
+        .expect("Could not allocate memory");
     }
 
-    if let Ok(obj) = object::File::parse(&file_buf[..]) {
-        // Mount app at 0x400000 in memory
-        let userspace_fn_virt_base = 0x400000;
+    let file_buf: &mut [u8] =
+        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, 0x227000_usize) };
+    // file_buf.try_reserve_exact(0x227000).unwrap();
+    let _size = file.read(file_buf).unwrap();
+    println!("read");
 
-        let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
+    let binary = ElfBinary::new(file_buf).unwrap();
+    let mut loader = elf::loader::UserspaceElfLoader {
+        vbase: 0x400000,
+        user_page_table_ptr,
+    };
+    binary.load(&mut loader).expect("Can't load the binary");
 
-        // user heap
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(0x800000),
-                0x1000_u64, // Size (bytes)
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate memory");
-        }
-
-        // entry point + 0x400000
-        let entry_point = userspace_fn_virt_base + obj.entry();
-        for segment in obj.segments() {
-            // segment address + 0x400000
-            let segment_address = userspace_fn_virt_base + segment.address();
-            let start_address = VirtAddr::new(segment_address);
-
-            // allocate pages for the app
-            unsafe {
-                memory::allocate_pages(
-                    user_page_table_ptr,
-                    start_address,
-                    segment.size(),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
-                )
-                .expect("Could not allocate memory");
-            }
-
-            memory::switch_to_pagetable(user_page_table_physaddr);
-
-            if let Ok(data) = segment.data() {
-                let dest_ptr = segment_address as *mut u8;
-                for (i, value) in data.iter().enumerate() {
-                    unsafe {
-                        let ptr = dest_ptr.add(i);
-                        core::ptr::write(ptr, *value);
-                    }
-                }
-            }
-        }
-
-        jmp_to_usermode(VirtAddr::new(entry_point), VirtAddr::new(0x801000));
+    // user heap
+    unsafe {
+        memory::allocate_pages(
+            user_page_table_ptr,
+            VirtAddr::new(0x800000),
+            0x2000_u64, // Size (bytes)
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+        )
+        .expect("Could not allocate memory");
     }
+
+    jmp_to_usermode(
+        VirtAddr::new(loader.vbase + binary.entry_point()),
+        VirtAddr::new(0x801000),
+    );
 }
 
 pub fn outb(port: u16, val: u8) {

@@ -260,6 +260,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "elfloader"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a7b18d35bf8ec3bac59c3ec29cf1f1b46e764e00b42a9c0c754d06e38e78f3b"
+dependencies = [
+ "bitflags",
+ "log",
+ "xmas-elf",
+]
+
+[[package]]
 name = "errno"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -531,10 +542,10 @@ dependencies = [
  "bit_field",
  "block_device",
  "bootloader_api",
+ "elfloader",
  "fat32",
  "lazy_static",
  "linked_list_allocator",
- "object",
  "pc-keyboard",
  "pic8259",
  "spin 0.9.8",
@@ -633,15 +644,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "578ede34cf02f8924ab9447f50c28075b4d3e5b269972345e7e0372b38c6cdcd"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "object"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67ac1d3f9a1d3616fd9a60c8d74296f22406a238b6a72f5cc1e6f314df4ffbf9"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
@@ -925,6 +927,9 @@ dependencies = [
 [[package]]
 name = "test-binary"
 version = "0.1.0"
+dependencies = [
+ "user_api",
+]
 
 [[package]]
 name = "thiserror"
@@ -973,6 +978,10 @@ name = "unicode-ident"
 version = "1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5464a87b239f13a63a501f2701565754bae92d243d4bb7eb12f6d57d2269bf4"
+
+[[package]]
+name = "user_api"
+version = "0.1.0"
 
 [[package]]
 name = "uuid"
@@ -1246,6 +1255,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "xmas-elf"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d29b4d8e7beaceb4e77447ba941a7600d23d0319ab52da0461abea214832d5a"
+dependencies = [
+ "zero",
+]
+
+[[package]]
 name = "yuki_os"
 version = "0.1.0"
 dependencies = [
@@ -1255,3 +1273,9 @@ dependencies = [
  "ovmf-prebuilt",
  "test-binary",
 ]
+
+[[package]]
+name = "zero"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fe21bcc34ca7fe6dd56cc2cb1261ea59d6b93620215aefb5ea6032265527784"
