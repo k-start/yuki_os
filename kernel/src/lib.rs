@@ -30,19 +30,6 @@ pub fn init(boot_info: &'static mut BootInfo) {
     ata::init();
     syscalls::init();
 
-    // println!("{},{},{},{},{}", b'F', b'A', b'T', b'3', b'2');
-
-    // for i in 0..10000 {
-    //     let mut buf: [u8; 512] = [0; 512];
-    //     ata::read(0, i, &mut buf);
-    //     for j in buf {
-    //         if j == b'F' {
-    //             println!("{i} - {:?}", buf);
-    //             break;
-    //         }
-    //     }
-    // }
-
     let device = fs::ata_wrapper::AtaWrapper::new(0);
     let cont = fat32::volume::Volume::new(device);
     let root = cont.root_dir();
@@ -56,15 +43,15 @@ pub fn init(boot_info: &'static mut BootInfo) {
         memory::allocate_pages(
             user_page_table_ptr,
             VirtAddr::new(0x500000000000),
-            0x227000_u64, // Size (bytes)
+            0x100000_u64,
             PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
         )
         .expect("Could not allocate memory");
     }
 
+    // fix me - terrible loading
     let file_buf: &mut [u8] =
-        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, 0x227000_usize) };
-    // file_buf.try_reserve_exact(0x227000).unwrap();
+        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, 0x100000_usize) };
     let _size = file.read(file_buf).unwrap();
     println!("read");
 
@@ -80,7 +67,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
         memory::allocate_pages(
             user_page_table_ptr,
             VirtAddr::new(0x800000),
-            0x2000_u64, // Size (bytes)
+            0x2000_u64,
             PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
         )
         .expect("Could not allocate memory");

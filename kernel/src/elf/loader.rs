@@ -93,7 +93,6 @@ impl ElfLoader for UserspaceElfLoader {
             "Initial TLS region is at = {:#x} -- {:#x}",
             tdata_start, tls_end
         );
-        panic!("not implemented");
-        // Ok(())
+        Ok(())
     }
 }
