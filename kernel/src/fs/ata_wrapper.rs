@@ -29,6 +29,9 @@ impl BlockDevice for AtaWrapper {
             );
 
             for j in 0..512 {
+                if (i * 512) + j >= buf.len() {
+                    break;
+                }
                 buf[(i * 512) + j] = buf_2[j];
             }
         }
