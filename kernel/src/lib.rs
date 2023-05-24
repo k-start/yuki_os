@@ -67,7 +67,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
         memory::allocate_pages(
             user_page_table_ptr,
             VirtAddr::new(0x800000),
-            0x2000_u64,
+            0x1000_u64,
             PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
         )
         .expect("Could not allocate memory");
