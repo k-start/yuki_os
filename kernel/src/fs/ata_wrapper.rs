@@ -6,7 +6,7 @@ pub enum Error {
     WriteError,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct AtaWrapper {
     pub ata_bus: i32,
 }

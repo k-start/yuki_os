@@ -4,8 +4,9 @@
 #![feature(naked_functions)]
 
 use bootloader_api::BootInfo;
-use elfloader::ElfBinary;
-use x86_64::{structures::paging::PageTableFlags, VirtAddr};
+// use elfloader::ElfBinary;
+// use x86_64::{structures::paging::PageTableFlags, VirtAddr};
+use x86_64::VirtAddr;
 
 #[macro_use]
 pub mod print;
@@ -31,52 +32,56 @@ pub fn init(boot_info: &'static mut BootInfo) {
     syscalls::init();
 
     let device = fs::ata_wrapper::AtaWrapper::new(0);
-    let cont = fat32::volume::Volume::new(device);
-    let root = cont.root_dir();
-    let file = root.open_file("test-binary").unwrap();
+    let fat32 = fs::fat32::Fat32::new(device);
+    println!("{:?}", fat32);
 
-    let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
+    // let device = fs::ata_wrapper::AtaWrapper::new(0);
+    // let cont = fat32::volume::Volume::new(device);
+    // let root = cont.root_dir();
+    // let file = root.open_file("test-binary").unwrap();
 
-    memory::switch_to_pagetable(user_page_table_physaddr);
+    // let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
-    unsafe {
-        memory::allocate_pages(
-            user_page_table_ptr,
-            VirtAddr::new(0x500000000000),
-            0x100000_u64,
-            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-        )
-        .expect("Could not allocate memory");
-    }
+    // memory::switch_to_pagetable(user_page_table_physaddr);
 
-    // fix me - terrible loading
-    let file_buf: &mut [u8] =
-        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, 0x100000_usize) };
-    let _size = file.read(file_buf).unwrap();
-    println!("read");
+    // unsafe {
+    //     memory::allocate_pages(
+    //         user_page_table_ptr,
+    //         VirtAddr::new(0x500000000000),
+    //         0x100000_u64,
+    //         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+    //     )
+    //     .expect("Could not allocate memory");
+    // }
 
-    let binary = ElfBinary::new(file_buf).unwrap();
-    let mut loader = elf::loader::UserspaceElfLoader {
-        vbase: 0x400000,
-        user_page_table_ptr,
-    };
-    binary.load(&mut loader).expect("Can't load the binary");
+    // // fix me - terrible loading
+    // let file_buf: &mut [u8] =
+    //     unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, 0x100000_usize) };
+    // let _size = file.read(file_buf).unwrap();
+    // println!("read");
 
-    // user heap
-    unsafe {
-        memory::allocate_pages(
-            user_page_table_ptr,
-            VirtAddr::new(0x800000),
-            0x1000_u64,
-            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-        )
-        .expect("Could not allocate memory");
-    }
+    // let binary = ElfBinary::new(file_buf).unwrap();
+    // let mut loader = elf::loader::UserspaceElfLoader {
+    //     vbase: 0x400000,
+    //     user_page_table_ptr,
+    // };
+    // binary.load(&mut loader).expect("Can't load the binary");
 
-    jmp_to_usermode(
-        VirtAddr::new(loader.vbase + binary.entry_point()),
-        VirtAddr::new(0x801000),
-    );
+    // // user heap
+    // unsafe {
+    //     memory::allocate_pages(
+    //         user_page_table_ptr,
+    //         VirtAddr::new(0x800000),
+    //         0x1000_u64,
+    //         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+    //     )
+    //     .expect("Could not allocate memory");
+    // }
+
+    // jmp_to_usermode(
+    //     VirtAddr::new(loader.vbase + binary.entry_point()),
+    //     VirtAddr::new(0x801000),
+    // );
 }
 
 pub fn outb(port: u16, val: u8) {
