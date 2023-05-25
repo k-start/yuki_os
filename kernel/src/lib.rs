@@ -33,6 +33,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
 
     let device = fs::ata_wrapper::AtaWrapper::new(0);
     let fat32 = fs::fat32::Fat32::new(device);
+    fat32.root_dir();
     println!("{:?}", fat32);
 
     // let device = fs::ata_wrapper::AtaWrapper::new(0);
