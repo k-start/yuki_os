@@ -46,9 +46,9 @@ where
 
         let (_head, dir, _tail) = unsafe { buf.align_to::<DirEntry>() };
 
-        let name = core::str::from_utf8(&dir[0].name).unwrap_or("oops");
+        let name = core::str::from_utf8(&dir[1].name).unwrap_or("oops");
 
-        println!("{} {:?}", name, dir[0]);
+        println!("{} {:#?}", name, dir);
     }
 }
 
@@ -87,7 +87,8 @@ pub struct BiosParameterBlock {
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 pub struct DirEntry {
-    name: [u8; 11],
+    name: [u8; 8],
+    ext: [u8; 3],
     attribute: u8,
     nt_reserve: u8,
     creation_time_tenth: u8,
