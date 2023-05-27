@@ -44,11 +44,44 @@ where
         let mut buf = [0; BUFFER_SIZE];
         self.device.read(&mut buf, root_sector as usize, 1).unwrap();
 
-        let (_head, dir, _tail) = unsafe { buf.align_to::<DirEntry>() };
+        let (_head, dir_entries, _tail) = unsafe { buf.align_to::<DirEntry>() };
 
-        let name = core::str::from_utf8(&dir[1].name).unwrap_or("oops");
+        for dir in dir_entries {
+            // long file name
+            if dir.attribute == 15 {
+                let bytes: &[u8] = unsafe {
+                    core::slice::from_raw_parts(
+                        (dir as *const DirEntry) as *const u8,
+                        core::mem::size_of::<DirEntry>(),
+                    )
+                };
 
-        println!("{} {:#?}", name, dir);
+                let (_head, lfns, _tail) = unsafe { bytes.align_to::<LongFileName>() };
+                let lfn = lfns[0];
+
+                println!("{:?}", lfn);
+
+                let mut name: [u8; 13] = [0; 13];
+
+                for i in (0..lfn.name.len()).step_by(2) {
+                    name[i / 2] = lfn.name[i];
+                }
+                for i in (0..lfn.name_2.len()).step_by(2) {
+                    name[i / 2 + 5] = lfn.name_2[i];
+                }
+                for i in (0..lfn.name_3.len()).step_by(2) {
+                    if lfn.name_3[i] == 255 || lfn.name_3[i] == 0 {
+                        break;
+                    }
+                    name[i / 2 + 5 + 6] = lfn.name_3[i];
+                }
+
+                let name = core::str::from_utf8(&name).unwrap_or("oops");
+                println!("{:?}", name);
+            }
+        }
+
+        // println!("{:#?}", dir_entries);
     }
 }
 
@@ -100,4 +133,17 @@ pub struct DirEntry {
     write_date: u16,
     first_cluster_low: u16,
     file_size: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+pub struct LongFileName {
+    order: u8,
+    name: [u8; 10],
+    attribute: u8,
+    r#type: u8,
+    checksum: u8,
+    name_2: [u8; 12],
+    first_cluster_low: u16,
+    name_3: [u8; 4],
 }
