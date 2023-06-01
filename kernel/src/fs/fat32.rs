@@ -1,5 +1,7 @@
 use block_device::BlockDevice;
 
+use super::filesystem::FileSystem;
+
 const BUFFER_SIZE: usize = 512;
 
 #[derive(Debug)]
@@ -10,6 +12,69 @@ where
 {
     device: T,
     bpb: BiosParameterBlock,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+pub struct BiosParameterBlock {
+    _offset: [u8; 0xB],
+    bytes_per_sector: u16,
+    sectors_per_cluster: u8,
+    reserved_sectors: u16,
+    fats: u8,
+    root_entries: u16,
+    total_sectors_16: u16,
+    media: u8,
+    sectors_per_fat_16: u16,
+    sectors_per_track: u16,
+    heads: u16,
+    hidden_sectors: u32,
+    total_sectors_32: u32,
+
+    // Extended BIOS Paramter Block
+    sectors_per_fat_32: u32,
+    extended_flags: u16,
+    fs_version: u16,
+    root_dir_first_cluster: u32,
+    fs_info_sector: u16,
+    backup_boot_sector: u16,
+    reserved_0: [u8; 12],
+    drive_num: u8,
+    ext_sig: u8,
+    volume_id: u32,
+    volume_label: [u8; 11],
+    fs_type_label: [u8; 8],
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+pub struct DirEntry {
+    name: [u8; 8],
+    ext: [u8; 3],
+    attribute: u8,
+    nt_reserve: u8,
+    creation_time_tenth: u8,
+    creation_time: u16,
+    creation_date: u16,
+    last_access_date: u16,
+    first_cluster_high: u16,
+    write_time: u16,
+    write_date: u16,
+    first_cluster_low: u16,
+    file_size: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C, packed)]
+pub struct LongFileName {
+    order: u8,
+    name: [u8; 10],
+    attribute: u8,
+    r#type: u8,
+    checksum: u8,
+    name_2: [u8; 12],
+    first_cluster_low: u16,
+    name_3: [u8; 4],
 }
 
 impl<T> Fat32<T>
@@ -93,65 +158,16 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-#[repr(C, packed)]
-pub struct BiosParameterBlock {
-    _offset: [u8; 0xB],
-    bytes_per_sector: u16,
-    sectors_per_cluster: u8,
-    reserved_sectors: u16,
-    fats: u8,
-    root_entries: u16,
-    total_sectors_16: u16,
-    media: u8,
-    sectors_per_fat_16: u16,
-    sectors_per_track: u16,
-    heads: u16,
-    hidden_sectors: u32,
-    total_sectors_32: u32,
+impl<T> FileSystem for Fat32<T>
+where
+    T: BlockDevice + Clone + Copy,
+    <T as BlockDevice>::Error: core::fmt::Debug,
+{
+    fn dir_entries(&self, dir: &str) -> alloc::vec::Vec<super::filesystem::File> {
+        todo!()
+    }
 
-    // Extended BIOS Paramter Block
-    sectors_per_fat_32: u32,
-    extended_flags: u16,
-    fs_version: u16,
-    root_dir_first_cluster: u32,
-    fs_info_sector: u16,
-    backup_boot_sector: u16,
-    reserved_0: [u8; 12],
-    drive_num: u8,
-    ext_sig: u8,
-    volume_id: u32,
-    volume_label: [u8; 11],
-    fs_type_label: [u8; 8],
-}
-
-#[derive(Debug, Clone, Copy)]
-#[repr(C, packed)]
-pub struct DirEntry {
-    name: [u8; 8],
-    ext: [u8; 3],
-    attribute: u8,
-    nt_reserve: u8,
-    creation_time_tenth: u8,
-    creation_time: u16,
-    creation_date: u16,
-    last_access_date: u16,
-    first_cluster_high: u16,
-    write_time: u16,
-    write_date: u16,
-    first_cluster_low: u16,
-    file_size: u32,
-}
-
-#[derive(Debug, Clone, Copy)]
-#[repr(C, packed)]
-pub struct LongFileName {
-    order: u8,
-    name: [u8; 10],
-    attribute: u8,
-    r#type: u8,
-    checksum: u8,
-    name_2: [u8; 12],
-    first_cluster_low: u16,
-    name_3: [u8; 4],
+    fn open(&self, path: &str) -> super::filesystem::File {
+        todo!()
+    }
 }

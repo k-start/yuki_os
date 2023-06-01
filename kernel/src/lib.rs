@@ -30,11 +30,13 @@ pub fn init(boot_info: &'static mut BootInfo) {
     );
     ata::init();
     syscalls::init();
+    fs::vfs::init();
 
     let device = fs::ata_wrapper::AtaWrapper::new(0);
-    let fat32 = fs::fat32::Fat32::new(device);
-    fat32.root_dir();
-    println!("{:?}", fat32);
+    let filesystem = fs::fat32::Fat32::new(device);
+    fs::vfs::mount(filesystem);
+
+    fs::vfs::open("a:/test-binary");
 
     // let device = fs::ata_wrapper::AtaWrapper::new(0);
     // let cont = fat32::volume::Volume::new(device);
