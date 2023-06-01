@@ -35,14 +35,22 @@ where
         Fat32 { device, bpb }
     }
 
+    pub fn sector_from_cluster(&self, cluster: u32) -> usize {
+        let bpb = self.bpb;
+
+        (bpb.reserved_sectors as usize
+            + (bpb.fats as usize * bpb.sectors_per_fat_32 as usize)
+            + ((cluster - 2) as usize * bpb.sectors_per_cluster as usize))
+            * bpb.bytes_per_sector as usize
+    }
+
     pub fn root_dir(&self) {
         let bpb = self.bpb;
 
-        let root_sector = (bpb.reserved_sectors as u32 + bpb.fats as u32 * bpb.sectors_per_fat_32)
-            * bpb.bytes_per_sector as u32;
+        let root_sector = self.sector_from_cluster(bpb.root_dir_first_cluster);
 
         let mut buf = [0; BUFFER_SIZE];
-        self.device.read(&mut buf, root_sector as usize, 1).unwrap();
+        self.device.read(&mut buf, root_sector, 1).unwrap();
 
         let (_head, dir_entries, _tail) = unsafe { buf.align_to::<DirEntry>() };
 
