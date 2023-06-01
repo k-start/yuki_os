@@ -5,6 +5,8 @@ use spin::Mutex;
 
 use crate::fs::filesystem::FileSystem;
 
+use super::filesystem::File;
+
 lazy_static! {
     static ref FS: Mutex<Vec<Box<dyn FileSystem + Send>>> = Mutex::new(Vec::new());
 }
@@ -18,17 +20,32 @@ pub fn mount<T: FileSystem + Send + 'static>(filesystem: T) {
 
 pub fn open(path: &str) {
     let fs = FS.lock();
-    let split: Vec<&str> = path.split(":/").collect();
-
-    if split.len() != 2 {
-        return;
-    }
-
-    let device = split[0].chars().next().unwrap() as u8 - b'a';
+    let (device, path) = get_device(path);
 
     if device as usize >= fs.len() {
         return;
     }
 
-    fs[device as usize].open(split[1]);
+    fs[device as usize].open(path);
+}
+
+pub fn list_dir(path: &str) -> Option<Vec<File>> {
+    let fs = FS.lock();
+    let (device, path) = get_device(path);
+
+    if device as usize >= fs.len() {
+        return None;
+    }
+
+    Some(fs[device as usize].dir_entries(path))
+}
+
+fn get_device(path: &str) -> (u8, &str) {
+    let split: Vec<&str> = path.split(":/").collect();
+
+    if split.len() != 2 {
+        return (100, "");
+    }
+
+    (split[0].chars().next().unwrap() as u8 - b'a', split[1])
 }

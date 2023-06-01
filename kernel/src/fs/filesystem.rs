@@ -6,7 +6,9 @@ pub trait FileSystem {
     fn open(&self, path: &str) -> File;
 }
 
+#[derive(Default, Debug, Clone)]
 pub struct File {
     pub name: String,
-    pub size: i32,
+    pub r#type: String,
+    pub size: u32,
 }

@@ -1,4 +1,9 @@
+use alloc::borrow::ToOwned;
+use alloc::format;
+use alloc::vec::Vec;
 use block_device::BlockDevice;
+
+use crate::fs::filesystem::File;
 
 use super::filesystem::FileSystem;
 
@@ -163,8 +168,45 @@ where
     T: BlockDevice + Clone + Copy,
     <T as BlockDevice>::Error: core::fmt::Debug,
 {
-    fn dir_entries(&self, dir: &str) -> alloc::vec::Vec<super::filesystem::File> {
-        todo!()
+    fn dir_entries(&self, _dir: &str) -> Vec<File> {
+        let mut ret = Vec::new();
+
+        let bpb = self.bpb;
+        let root_sector = self.sector_from_cluster(bpb.root_dir_first_cluster);
+
+        let mut buf = [0; BUFFER_SIZE];
+        self.device.read(&mut buf, root_sector, 1).unwrap();
+
+        let (_head, dir_entries, _tail) = unsafe { buf.align_to::<DirEntry>() };
+
+        for dir in dir_entries {
+            if dir.name == [0; 8] {
+                continue;
+            }
+            if (dir.attribute & 0x15) != 0 {
+                // long file name
+                continue;
+            }
+            let r#type = match dir.attribute & 0x10 {
+                0 => "file",
+                _ => "dir",
+            };
+            let name = core::str::from_utf8(&dir.name).unwrap_or("").trim();
+            let ext = core::str::from_utf8(&dir.ext).unwrap_or("").trim();
+            let name = match ext {
+                "" => format!("{name}"),
+                _ => format!("{name}.{ext}"),
+            };
+
+            let file = File {
+                name,
+                r#type: r#type.to_owned(),
+                size: dir.file_size,
+            };
+            ret.push(file);
+        }
+
+        ret
     }
 
     fn open(&self, path: &str) -> super::filesystem::File {
