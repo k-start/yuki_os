@@ -1,5 +1,6 @@
 use alloc::borrow::ToOwned;
 use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 use block_device::BlockDevice;
 
@@ -179,12 +180,37 @@ where
 
         let (_head, dir_entries, _tail) = unsafe { buf.align_to::<DirEntry>() };
 
-        for dir in dir_entries {
+        let mut long_file_name: String = String::new();
+
+        for (i, dir) in dir_entries.iter().enumerate() {
             if dir.name == [0; 8] {
                 continue;
             }
             if (dir.attribute & 0x15) != 0 {
                 // long file name
+                let bytes: [u8; 0x20] = buf[i * 0x20..(i + 1) * 0x20]
+                    .try_into()
+                    .expect("incorrect len");
+                let lfn = read_long_file_name(&bytes);
+                let mut name: [u8; 13] = [0; 13];
+
+                for (i, c) in lfn.name.iter().enumerate().step_by(2) {
+                    name[i / 2] = *c;
+                }
+                for (i, c) in lfn.name_2.iter().enumerate().step_by(2) {
+                    name[i / 2 + 5] = *c;
+                }
+                for (i, c) in lfn.name_3.iter().enumerate().step_by(2) {
+                    if lfn.name_3[i] == 255 {
+                        break;
+                    }
+                    name[i / 2 + 11] = *c;
+                }
+                long_file_name = String::from_utf8((&name).to_vec())
+                    .unwrap()
+                    .trim()
+                    .replace('\0', "")
+                    .to_owned();
                 continue;
             }
             let r#type = match dir.attribute & 0x10 {
@@ -199,17 +225,53 @@ where
             };
 
             let file = File {
+                lfn: long_file_name,
                 name,
                 r#type: r#type.to_owned(),
                 size: dir.file_size,
+                first_cluster_high: dir.first_cluster_high,
+                first_cluster_low: dir.first_cluster_low,
             };
             ret.push(file);
+            long_file_name = String::new();
         }
 
         ret
     }
 
-    fn open(&self, path: &str) -> super::filesystem::File {
+    fn open(&self, path: &str) -> Option<File> {
+        let split: Vec<&str> = path.split("/").collect();
+        let file_name = *split.last().unwrap_or(&"");
+        let dir = self.dir_entries(path);
+        for file in dir {
+            if file.name.to_lowercase() == file_name.to_lowercase()
+                || file.lfn.to_lowercase() == file_name.to_lowercase()
+            {
+                return Some(file);
+            }
+        }
+        None
+    }
+
+    fn read(&self, file: &File, buffer: &mut [u8]) {
+        let mut buf = [0; BUFFER_SIZE];
+        self.device
+            .read(&mut buf, self.bpb.reserved_sectors as usize, 1)
+            .unwrap();
+
+        let mut buf_u32: [u32; 128] = [0; 128];
+
+        for i in (0..512).step_by(4) {
+            buf_u32[i / 4] = u32::from_le_bytes(buf[i..i + 4].try_into().unwrap());
+        }
+
+        println!("{:x?}", buf_u32);
+
         todo!()
     }
+}
+
+fn read_long_file_name(bytes: &[u8; 0x20]) -> LongFileName {
+    let (_head, lfns, _tail) = unsafe { bytes.align_to::<LongFileName>() };
+    lfns[0]
 }

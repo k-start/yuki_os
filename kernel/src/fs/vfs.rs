@@ -18,15 +18,21 @@ pub fn mount<T: FileSystem + Send + 'static>(filesystem: T) {
     fs.push(Box::new(filesystem));
 }
 
-pub fn open(path: &str) {
+pub fn open(path: &str) -> Option<File> {
     let fs = FS.lock();
     let (device, path) = get_device(path);
 
     if device as usize >= fs.len() {
-        return;
+        return None;
     }
 
-    fs[device as usize].open(path);
+    fs[device as usize].open(path)
+}
+
+pub fn read(file: &File, buf: &mut [u8]) {
+    let fs = FS.lock();
+
+    fs[0].read(file, buf);
 }
 
 pub fn list_dir(path: &str) -> Option<Vec<File>> {
