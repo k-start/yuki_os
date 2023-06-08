@@ -1,11 +1,8 @@
+use crate::fs::filesystem::{Error, File, FileSystem};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
 use spin::Mutex;
-
-use crate::fs::filesystem::FileSystem;
-
-use super::filesystem::File;
 
 lazy_static! {
     static ref FS: Mutex<Vec<Box<dyn FileSystem + Send>>> = Mutex::new(Vec::new());
@@ -18,32 +15,32 @@ pub fn mount<T: FileSystem + Send + 'static>(filesystem: T) {
     fs.push(Box::new(filesystem));
 }
 
-pub fn open(path: &str) -> Option<File> {
+pub fn open(path: &str) -> Result<File, Error> {
     let fs = FS.lock();
     let (device, path) = get_device(path);
 
     if device as usize >= fs.len() {
-        return None;
+        return Err(Error::DeviceDoesntExist);
     }
 
     fs[device as usize].open(path)
 }
 
-pub fn read(file: &File, buf: &mut [u8]) {
+pub fn read(file: &File, buf: &mut [u8]) -> Result<(), Error> {
     let fs = FS.lock();
 
-    fs[0].read(file, buf);
+    fs[0].read(file, buf)
 }
 
-pub fn list_dir(path: &str) -> Option<Vec<File>> {
+pub fn list_dir(path: &str) -> Result<Vec<File>, Error> {
     let fs = FS.lock();
     let (device, path) = get_device(path);
 
     if device as usize >= fs.len() {
-        return None;
+        return Err(Error::DeviceDoesntExist);
     }
 
-    Some(fs[device as usize].dir_entries(path))
+    fs[device as usize].dir_entries(path)
 }
 
 fn get_device(path: &str) -> (u8, &str) {

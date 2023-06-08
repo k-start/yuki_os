@@ -54,7 +54,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
     // fix me - terrible loading
     let file_buf: &mut [u8] =
         unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.size as usize) };
-    fs::vfs::read(&file, file_buf);
+    let _ = fs::vfs::read(&file, file_buf);
 
     let binary = ElfBinary::new(file_buf).unwrap();
     let mut loader = elf::loader::UserspaceElfLoader {
