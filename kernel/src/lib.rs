@@ -5,7 +5,6 @@
 
 use bootloader_api::BootInfo;
 use elfloader::ElfBinary;
-use fatfs::Read;
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 #[macro_use]
@@ -30,15 +29,13 @@ pub fn init(boot_info: &'static mut BootInfo) {
     );
     ata::init();
     syscalls::init();
+    fs::vfs::init();
 
-    let device = fs::ata_wrapper::AtaWrapper::new(0);
+    let device = fs::fat32ata::Fat32Ata::new(0);
+    let fs = fs::fatfs::FatFs::new(device);
 
-    let fs = fatfs::FileSystem::new(device, fatfs::FsOptions::new()).unwrap();
-    let root_dir = fs.root_dir();
-
-    let mut file = root_dir.open_file("test-binary").unwrap();
-    let size: u32 = file.extents().map(|x| x.unwrap().size).sum();
-    println!("{}", size);
+    fs::vfs::mount(fs);
+    let file = fs::vfs::open("a:/test-binary").unwrap();
 
     let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
@@ -48,17 +45,16 @@ pub fn init(boot_info: &'static mut BootInfo) {
         memory::allocate_pages(
             user_page_table_ptr,
             VirtAddr::new(0x500000000000),
-            size as u64,
+            file.size as u64,
             PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
         )
         .expect("Could not allocate memory");
     }
 
-    // // fix me - terrible loading
+    // fix me - terrible loading
     let file_buf: &mut [u8] =
-        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, size as usize) };
-
-    file.read_exact(file_buf).unwrap();
+        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.size as usize) };
+    fs::vfs::read(&file, file_buf);
 
     let binary = ElfBinary::new(file_buf).unwrap();
     let mut loader = elf::loader::UserspaceElfLoader {

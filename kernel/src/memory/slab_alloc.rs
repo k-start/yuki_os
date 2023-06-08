@@ -60,7 +60,7 @@ impl SlabAllocator {
 
 unsafe impl GlobalAlloc for Locked<SlabAllocator> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        println!("allocing: {layout:?}");
+        // println!("allocing: {layout:?}");
         let mut allocator = self.lock();
         match list_index(&layout) {
             Some(index) => {
@@ -84,7 +84,7 @@ unsafe impl GlobalAlloc for Locked<SlabAllocator> {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        println!("de-allocing: {layout:?}");
+        // println!("de-allocing: {layout:?}");
         let mut allocator = self.lock();
         match list_index(&layout) {
             Some(index) => {

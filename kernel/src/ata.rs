@@ -1,5 +1,3 @@
-use crate::println;
-use alloc::string::String;
 use alloc::vec::Vec;
 use bit_field::BitField;
 use lazy_static::lazy_static;
@@ -67,7 +65,7 @@ impl Bus {
         }
     }
 
-    pub fn init(&mut self) -> (String, String, u32) {
+    pub fn init(&mut self) -> u32 {
         println!("[ATA] Initializing IDE on bus {:#x}", self.bus);
 
         unsafe {
@@ -98,8 +96,8 @@ impl Bus {
             }
         }
 
-        let model = String::from_utf8_lossy(&buf[54..94]).trim().into();
-        let serial = String::from_utf8_lossy(&buf[20..40]).trim().into();
+        let model = core::str::from_utf8(&buf[54..94]).unwrap().trim();
+        let serial = core::str::from_utf8(&buf[20..40]).unwrap().trim();
         let sectors = u32::from_be_bytes(buf[120..124].try_into().unwrap()).rotate_left(16);
 
         println!("[ATA] Device - {}", model);
@@ -110,7 +108,7 @@ impl Bus {
             self.command_register.write(0x02);
         }
 
-        (model, serial, sectors)
+        sectors
     }
 
     pub fn read(&mut self, block: u32, buf: &mut [u8]) {

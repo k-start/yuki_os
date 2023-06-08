@@ -24,16 +24,16 @@ impl IoError for Error {
 }
 
 #[derive(Clone, Copy)]
-pub struct AtaWrapper {
+pub struct Fat32Ata {
     pub ata_bus: i32,
     pub pos: u64,
 }
 
-impl IoBase for AtaWrapper {
+impl IoBase for Fat32Ata {
     type Error = Error;
 }
 
-impl Read for AtaWrapper {
+impl Read for Fat32Ata {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
         if buf.len() > 512 {
             panic!("longer than 512");
@@ -76,7 +76,7 @@ impl Read for AtaWrapper {
     }
 }
 
-impl Write for AtaWrapper {
+impl Write for Fat32Ata {
     fn write(&mut self, _buf: &[u8]) -> Result<usize, Self::Error> {
         todo!()
     }
@@ -101,7 +101,7 @@ impl Write for AtaWrapper {
     }
 }
 
-impl Seek for AtaWrapper {
+impl Seek for Fat32Ata {
     fn seek(&mut self, pos: fatfs::SeekFrom) -> Result<u64, Self::Error> {
         // println!("{:?}", pos);
 
@@ -121,8 +121,8 @@ impl Seek for AtaWrapper {
     }
 }
 
-impl AtaWrapper {
-    pub fn new(ata_bus: i32) -> AtaWrapper {
-        AtaWrapper { ata_bus, pos: 0 }
+impl Fat32Ata {
+    pub fn new(ata_bus: i32) -> Fat32Ata {
+        Fat32Ata { ata_bus, pos: 0 }
     }
 }
