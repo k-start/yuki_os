@@ -63,21 +63,30 @@ pub fn init(boot_info: &'static mut BootInfo) {
     };
     binary.load(&mut loader).expect("Can't load the binary");
 
-    // user heap
     unsafe {
-        memory::allocate_pages(
+        memory::deallocate_pages(
             user_page_table_ptr,
-            VirtAddr::new(0x800000),
-            0x1000_u64,
-            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+            VirtAddr::new(0x500000000000),
+            file.size as u64,
         )
-        .expect("Could not allocate memory");
+        .expect("Could not deallocate memory");
     }
 
-    jmp_to_usermode(
-        VirtAddr::new(loader.vbase + binary.entry_point()),
-        VirtAddr::new(0x801000),
-    );
+    // user heap
+    // unsafe {
+    //     memory::allocate_pages(
+    //         user_page_table_ptr,
+    //         VirtAddr::new(0x800000),
+    //         0x1000_u64,
+    //         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+    //     )
+    //     .expect("Could not allocate memory");
+    // }
+
+    // jmp_to_usermode(
+    //     VirtAddr::new(loader.vbase + binary.entry_point()),
+    //     VirtAddr::new(0x801000),
+    // );
 }
 
 pub fn outb(port: u16, val: u8) {

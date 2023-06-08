@@ -6,8 +6,9 @@ use core::arch::asm;
 use bootloader_api::info::{MemoryRegionKind, MemoryRegions};
 use x86_64::{
     structures::paging::{
-        mapper::MapToError, FrameAllocator, Mapper, OffsetPageTable, Page, PageTable,
-        PageTableFlags, PhysFrame, Size4KiB,
+        mapper::{MapToError, UnmapError},
+        FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame,
+        Size4KiB,
     },
     PhysAddr, VirtAddr,
 };
@@ -247,6 +248,39 @@ pub unsafe fn allocate_pages(
                 .map_to(page, frame, flags, &mut memory_info.frame_allocator)?
                 .flush()
         };
+    }
+
+    Ok(())
+}
+
+/// dellocates pages in the level_4_table supplied
+///
+/// # Safety
+///
+/// This function is unsafe because the caller must guarantee that the
+/// passed `level_4_table` must point to the level 4 page table of a valid
+/// page table hierarchy. Otherwise this function might break memory safety,
+/// e.g. by writing to an illegal memory location.
+pub unsafe fn deallocate_pages(
+    level_4_table: *mut PageTable,
+    start_addr: VirtAddr,
+    size: u64,
+) -> Result<(), UnmapError> {
+    let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
+
+    let mut mapper =
+        unsafe { OffsetPageTable::new(&mut *level_4_table, memory_info.phys_mem_offset) };
+
+    let page_range = {
+        let end_addr = start_addr + size - 1u64;
+        let start_page = Page::<Size4KiB>::containing_address(start_addr);
+        let end_page = Page::containing_address(end_addr);
+        Page::range_inclusive(start_page, end_page)
+    };
+
+    // FIX ME - deallocate frame
+    for page in page_range {
+        mapper.unmap(page)?.1.flush();
     }
 
     Ok(())
