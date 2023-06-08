@@ -5,6 +5,7 @@
 
 use bootloader_api::BootInfo;
 use elfloader::ElfBinary;
+use fatfs::Read;
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 #[macro_use]
@@ -31,9 +32,22 @@ pub fn init(boot_info: &'static mut BootInfo) {
     syscalls::init();
 
     let device = fs::ata_wrapper::AtaWrapper::new(0);
-    let cont = fat32::volume::Volume::new(device);
-    let root = cont.root_dir();
-    let file = root.open_file("test-binary").unwrap();
+    // let cont = fat32::volume::Volume::new(device);
+    // let root = cont.root_dir();
+    // let file = root.open_file("test-binary").unwrap();
+
+    let fs = fatfs::FileSystem::new(device, fatfs::FsOptions::new()).unwrap();
+    let root_dir = fs.root_dir();
+    // for i in root_dir.iter() {
+    //     let dir_entry = i.unwrap();
+    //     println!("{:?}", dir_entry.file_name());
+    // }
+
+    let mut file = root_dir.open_file("test-binary").unwrap();
+    let size: u32 = file.extents().map(|x| x.unwrap().size).sum();
+    println!("{}", size);
+
+    // let mut file = root_dir.create_file("hello.txt")?;
 
     let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
@@ -43,17 +57,19 @@ pub fn init(boot_info: &'static mut BootInfo) {
         memory::allocate_pages(
             user_page_table_ptr,
             VirtAddr::new(0x500000000000),
-            0x100000_u64,
+            size as u64,
             PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
         )
         .expect("Could not allocate memory");
     }
 
-    // fix me - terrible loading
+    // // fix me - terrible loading
     let file_buf: &mut [u8] =
-        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, 0x100000_usize) };
-    let _size = file.read(file_buf).unwrap();
-    println!("read");
+        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, size as usize) };
+
+    file.read_exact(file_buf).unwrap();
+    // // let _size = file.read(file_buf).unwrap();
+    // // println!("read");
 
     let binary = ElfBinary::new(file_buf).unwrap();
     let mut loader = elf::loader::UserspaceElfLoader {
@@ -61,6 +77,8 @@ pub fn init(boot_info: &'static mut BootInfo) {
         user_page_table_ptr,
     };
     binary.load(&mut loader).expect("Can't load the binary");
+
+    // println!("{:x?}", loader.vbase + binary.entry_point());
 
     // user heap
     unsafe {
