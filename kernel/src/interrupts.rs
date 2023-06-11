@@ -1,4 +1,7 @@
-use crate::gdt;
+use crate::{
+    gdt,
+    scheduler::{self, Context},
+};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spin;
@@ -43,7 +46,7 @@ lazy_static! {
                 .set_handler_fn(general_protection_fault_handler)
                 .set_stack_index(gdt::GENERAL_PROTECTION_FAULT_IST_INDEX);
         }
-        idt[InterruptIndex::Timer.as_usize()].set_handler_fn(timer_interrupt_handler);
+        idt[InterruptIndex::Timer.as_usize()].set_handler_fn(timer_handler_naked);
         idt[InterruptIndex::Keyboard.as_usize()].set_handler_fn(keyboard_interrupt_handler);
         idt
     };
@@ -52,7 +55,7 @@ lazy_static! {
 pub fn init() {
     IDT.load();
     unsafe { PICS.lock().initialize() };
-    x86_64::instructions::interrupts::enable();
+    // x86_64::instructions::interrupts::enable();
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
@@ -89,11 +92,16 @@ extern "x86-interrupt" fn general_protection_fault_handler(
     crate::hlt_loop();
 }
 
-extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+extern "C" fn timer_interrupt_handler(context_addr: *const Context) -> *const Context {
+    scheduler::SCHEDULER.save_current_context(context_addr);
+
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
+
+    let next = unsafe { scheduler::SCHEDULER.run_next() };
+    &next as *const Context
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
@@ -129,3 +137,81 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
             .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
     }
 }
+
+#[macro_export]
+macro_rules! interrupt_wrap {
+    ($func: ident => $wrapper:ident) => {
+        #[naked]
+        pub extern "x86-interrupt" fn $wrapper (_stack_frame: InterruptStackFrame) {
+            // Naked functions must consist of a single asm! block
+            unsafe{
+                core::arch::asm!(
+                    // Disable interrupts
+                    "cli",
+                    // Push registers
+                    "push rax",
+                    "push rbx",
+                    "push rcx",
+                    "push rdx",
+
+                    "push rdi",
+                    "push rsi",
+                    "push rbp",
+                    "push r8",
+
+                    "push r9",
+                    "push r10",
+                    "push r11",
+                    "push r12",
+
+                    "push r13",
+                    "push r14",
+                    "push r15",
+
+                    // First argument in rdi with C calling convention
+                    "mov rdi, rsp",
+                    // Call the hander function
+                    "call {handler}",
+
+                    // New stack pointer is in RAX
+                    // (C calling convention return value)
+                    "cmp rax, 0",
+                    "je 2f", // If RAX is zero, keep stack
+                    "mov rsp, rax",
+                     "2:",
+
+                    // Pop scratch registers from new stack
+                    "pop r15",
+                    "pop r14",
+                    "pop r13",
+
+                    "pop r12",
+                    "pop r11",
+                    "pop r10",
+                    "pop r9",
+
+                    "pop r8",
+                    "pop rbp",
+                    "pop rsi",
+                    "pop rdi",
+
+                    "pop rdx",
+                    "pop rcx",
+                    "pop rbx",
+                    "pop rax",
+                    // Enable interrupts
+                    "sti",
+                    // Interrupt return
+                    "iretq",
+                    // Note: Getting the handler pointer here using `sym` operand, because
+                    // an `in` operand would clobber a register that we need to save, and we
+                    // can't have two asm blocks
+                    handler = sym $func,
+                    options(noreturn)
+                );
+            }
+        }
+    };
+}
+
+interrupt_wrap!(timer_interrupt_handler => timer_handler_naked);

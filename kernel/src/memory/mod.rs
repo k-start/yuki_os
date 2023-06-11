@@ -35,7 +35,7 @@ pub fn init(physical_memory_offset: Option<u64>, memory_regions: &'static Memory
         MEMORY_INFO = Some(MemoryInfo {
             phys_mem_offset,
             frame_allocator,
-            kernel_l4_table: level_4_table,
+            kernel_l4_table: level_4_table.0,
         })
     };
 
@@ -52,7 +52,7 @@ pub fn init(physical_memory_offset: Option<u64>, memory_regions: &'static Memory
 /// `physical_memory_offset`. Also, this function must be only called once
 /// to avoid aliasing `&mut` references (which is undefined behavior).
 pub unsafe fn init_page_table(physical_memory_offset: VirtAddr) -> OffsetPageTable<'static> {
-    let level_4_table = active_level_4_table(physical_memory_offset);
+    let level_4_table = active_level_4_table(physical_memory_offset).0;
     OffsetPageTable::new(level_4_table, physical_memory_offset)
 }
 
@@ -64,7 +64,7 @@ pub unsafe fn init_page_table(physical_memory_offset: VirtAddr) -> OffsetPageTab
 /// complete physical memory is mapped to virtual memory at the passed
 /// `physical_memory_offset`. Also, this function must be only called once
 /// to avoid aliasing `&mut` references (which is undefined behavior).
-unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> &'static mut PageTable {
+unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> (&'static mut PageTable, u64) {
     use x86_64::registers::control::Cr3;
 
     let (level_4_table_frame, _) = Cr3::read();
@@ -73,7 +73,13 @@ unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> &'static mut
     let virt = physical_memory_offset + phys.as_u64();
     let page_table_ptr: *mut PageTable = virt.as_mut_ptr();
 
-    &mut *page_table_ptr // unsafe
+    (&mut *page_table_ptr, phys.as_u64()) // unsafe
+}
+
+pub fn active_page_table() -> (&'static mut PageTable, u64) {
+    let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
+
+    unsafe { active_level_4_table(memory_info.phys_mem_offset) }
 }
 
 fn translate_addr_inner(addr: VirtAddr, physical_memory_offset: VirtAddr) -> Option<PhysAddr> {
@@ -243,11 +249,10 @@ pub unsafe fn allocate_pages(
             .frame_allocator
             .allocate_frame()
             .ok_or(MapToError::FrameAllocationFailed)?;
-        unsafe {
-            mapper
-                .map_to(page, frame, flags, &mut memory_info.frame_allocator)?
-                .flush()
-        };
+
+        mapper
+            .map_to(page, frame, flags, &mut memory_info.frame_allocator)?
+            .flush();
     }
 
     Ok(())
@@ -280,7 +285,12 @@ pub unsafe fn deallocate_pages(
 
     // FIX ME - deallocate frame
     for page in page_range {
+        //     let phys = mapper
+        //         .translate_page(page)
+        //         .map_err(|_| UnmapError::PageNotMapped)?;
         mapper.unmap(page)?.1.flush();
+
+        // memory_info.frame_allocator.deallocate_frame(phys);
     }
 
     Ok(())
@@ -339,3 +349,10 @@ unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
         frame
     }
 }
+
+// impl FrameDeallocator<Size4KiB> for BootInfoFrameAllocator {
+//     unsafe fn deallocate_frame(&mut self, frame: PhysFrame<Size4KiB>) {
+//         self.memory_map.
+//         todo!()
+//     }
+// }

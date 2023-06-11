@@ -4,8 +4,6 @@
 #![feature(naked_functions)]
 
 use bootloader_api::BootInfo;
-use elfloader::ElfBinary;
-use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 #[macro_use]
 pub mod print;
@@ -16,11 +14,13 @@ pub mod fs;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;
+pub mod scheduler;
 pub mod syscalls;
 
 extern crate alloc;
 
 pub fn init(boot_info: &'static mut BootInfo) {
+    x86_64::instructions::interrupts::disable();
     gdt::init();
     interrupts::init();
     memory::init(
@@ -36,57 +36,12 @@ pub fn init(boot_info: &'static mut BootInfo) {
 
     fs::vfs::mount(fs);
     let file = fs::vfs::open("a:/test-binary").unwrap();
+    let file2 = fs::vfs::open("a:/hello-world").unwrap();
 
-    let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
-
-    memory::switch_to_pagetable(user_page_table_physaddr);
-
-    unsafe {
-        memory::allocate_pages(
-            user_page_table_ptr,
-            VirtAddr::new(0x500000000000),
-            file.size as u64,
-            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-        )
-        .expect("Could not allocate memory");
-    }
-
-    // fix me - terrible loading
-    let file_buf: &mut [u8] =
-        unsafe { core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.size as usize) };
-    let _ = fs::vfs::read(&file, file_buf);
-
-    let binary = ElfBinary::new(file_buf).unwrap();
-    let mut loader = elf::loader::UserspaceElfLoader {
-        vbase: 0x400000,
-        user_page_table_ptr,
-    };
-    binary.load(&mut loader).expect("Can't load the binary");
-
-    unsafe {
-        memory::deallocate_pages(
-            user_page_table_ptr,
-            VirtAddr::new(0x500000000000),
-            file.size as u64,
-        )
-        .expect("Could not deallocate memory");
-    }
-
-    // user heap
-    // unsafe {
-    //     memory::allocate_pages(
-    //         user_page_table_ptr,
-    //         VirtAddr::new(0x800000),
-    //         0x1000_u64,
-    //         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
-    //     )
-    //     .expect("Could not allocate memory");
-    // }
-
-    // jmp_to_usermode(
-    //     VirtAddr::new(loader.vbase + binary.entry_point()),
-    //     VirtAddr::new(0x801000),
-    // );
+    let sched = &scheduler::SCHEDULER;
+    sched.schedule(file);
+    sched.schedule(file2);
+    x86_64::instructions::interrupts::enable();
 }
 
 pub fn outb(port: u16, val: u8) {
@@ -117,27 +72,5 @@ pub fn ins(port: u16) -> u16 {
 pub fn hlt_loop() -> ! {
     loop {
         x86_64::instructions::hlt();
-    }
-}
-
-#[inline(never)]
-pub fn jmp_to_usermode(code: VirtAddr, stack_end: VirtAddr) {
-    unsafe {
-        let (cs_idx, ds_idx) = gdt::set_usermode_segments();
-        x86_64::instructions::tlb::flush_all(); // flush the TLB after address-space switch
-
-        core::arch::asm!(
-            "cli",        // Disable interrupts
-            "push {:r}",  // Stack segment (SS)
-            "push {:r}",  // Stack pointer (RSP)
-            "push 0x200", // RFLAGS with interrupts enabled
-            "push {:r}",  // Code segment (CS)
-            "push {:r}",  // Instruction pointer (RIP)
-            "iretq",
-            in(reg) ds_idx,
-            in(reg) stack_end.as_u64(),
-            in(reg) cs_idx,
-            in(reg) code.as_u64(),
-        );
     }
 }
