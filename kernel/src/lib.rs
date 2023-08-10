@@ -31,16 +31,22 @@ pub fn init(boot_info: &'static mut BootInfo) {
     syscalls::init();
     fs::vfs::init();
 
-    let device = fs::fat32ata::Fat32Ata::new(0);
-    let fs = fs::fatfs::FatFs::new(device);
+    let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
+    let initrd = fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize);
+    fs::vfs::mount(initrd);
+    println!("{:?}", fs::vfs::list_dir("a:/"));
 
-    fs::vfs::mount(fs);
-    let file = fs::vfs::open("a:/test-binary").unwrap();
-    let file2 = fs::vfs::open("a:/hello-world").unwrap();
+    // let device = fs::fat32ata::Fat32Ata::new(0);
+    // let fs = fs::fatfs::FatFs::new(device);
 
-    let sched = &scheduler::SCHEDULER;
-    sched.schedule(file);
-    sched.schedule(file2);
+    // fs::vfs::mount(fs);
+    // let file = fs::vfs::open("a:/test-binary").unwrap();
+    // let file2 = fs::vfs::open("a:/hello-world").unwrap();
+
+    // let sched = &scheduler::SCHEDULER;
+    // sched.schedule(file);
+    // sched.schedule(file2);
+
     x86_64::instructions::interrupts::enable();
 }
 

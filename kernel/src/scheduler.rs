@@ -119,8 +119,7 @@ impl Scheduler {
             }; // release held locks
             match task_state {
                 TaskState::SavedContext(context) => {
-                    // restore_context(&ctx) // either restore the saved context
-                    return context;
+                    return context; // either restore the saved context
                 }
                 TaskState::StartingInfo(exec_base, stack_end) => {
                     jmp_to_usermode(exec_base, stack_end); // or initialize the task with the given instruction, stack pointers
