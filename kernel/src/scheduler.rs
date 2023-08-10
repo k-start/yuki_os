@@ -8,10 +8,7 @@ use core::fmt::Display;
 use elfloader::ElfBinary;
 use lazy_static::lazy_static;
 use spin::Mutex;
-use x86_64::{
-    structures::paging::{PageTable, PageTableFlags},
-    VirtAddr,
-};
+use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 lazy_static! {
     pub static ref SCHEDULER: Scheduler = Scheduler::new();
@@ -212,53 +209,3 @@ pub fn jmp_to_usermode(code: VirtAddr, stack_end: VirtAddr) {
         );
     }
 }
-
-pub unsafe fn get_context() -> *const Context {
-    let context: *const Context;
-    core::arch::asm!(
-        "cli",
-        "push r15",
-        "push r14",
-        "push r13",
-        "push r12",
-        "push r11",
-        "push r10",
-        "push r9",
-        "push r8",
-        "push rdi",
-        "push rsi",
-        "push rdx",
-        "push rcx",
-        "push rbx",
-        "push rax",
-        "push rbp",
-        "mov {}, rsp",
-        "sub rsp, 0x400",
-        out(reg) context
-    );
-    context
-}
-
-// pub unsafe fn restore_context(context: &Context) {
-//     core::arch::asm!(
-//         "mov rsp, {:r}",
-//         "pop rbp",
-//         "pop rax",
-//         "pop rbx",
-//         "pop rcx",
-//         "pop rdx",
-//         "pop rsi",
-//         "pop rdi",
-//         "pop r8",
-//         "pop r9",
-//         "pop r10",
-//         "pop r11",
-//         "pop r12",
-//         "pop r13",
-//         "pop r14",
-//         "pop r15",
-//         "sti",
-//         "iretq",
-//         in(reg) context
-//     );
-// }
