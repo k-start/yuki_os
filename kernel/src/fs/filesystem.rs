@@ -22,4 +22,5 @@ pub struct File {
     pub path: String,
     pub r#type: String,
     pub size: u64,
+    pub ptr: Option<u64>,
 }

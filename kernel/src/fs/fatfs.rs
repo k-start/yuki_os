@@ -33,6 +33,7 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
                     false => "dir".to_owned(),
                 },
                 size: entry.len(),
+                ptr: None,
             });
         }
 
@@ -63,6 +64,7 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
                     path: path.to_owned(),
                     r#type: "file".to_owned(),
                     size: file.len(),
+                    ptr: None,
                 });
             }
         }

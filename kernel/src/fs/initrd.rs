@@ -8,6 +8,7 @@ pub struct InitRd<'a> {
 struct RdFile {
     filename: [u8; 32],
     size: usize,
+    offset: usize,
 }
 
 impl super::filesystem::FileSystem for InitRd<'_> {
@@ -22,7 +23,12 @@ impl super::filesystem::FileSystem for InitRd<'_> {
 
         for i in 0..file_count {
             let rd_file: RdFile = unsafe {
-                core::ptr::read(self.data.as_ptr().add((i as usize) * 40 + 1) as *const _)
+                core::ptr::read(
+                    self.data
+                        .as_ptr()
+                        .add((i as usize) * core::mem::size_of::<RdFile>() + 1)
+                        as *const _,
+                )
             };
 
             let name = core::str::from_utf8(&rd_file.filename)
@@ -34,6 +40,13 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                 path: name.to_owned(),
                 r#type: "file".to_owned(),
                 size: rd_file.size as u64,
+                ptr: Some(unsafe {
+                    self.data.as_ptr().add(
+                        rd_file.offset as usize
+                            + file_count as usize * core::mem::size_of::<RdFile>()
+                            + 1,
+                    ) as u64
+                }),
             })
         }
 
@@ -41,11 +54,69 @@ impl super::filesystem::FileSystem for InitRd<'_> {
     }
 
     fn open(&self, path: &str) -> Result<File, Error> {
-        todo!()
+        let file_count = self.data[0];
+
+        for i in 0..file_count {
+            let rd_file: RdFile = unsafe {
+                core::ptr::read(
+                    self.data
+                        .as_ptr()
+                        .add((i as usize) * core::mem::size_of::<RdFile>() + 1)
+                        as *const _,
+                )
+            };
+
+            let name = core::str::from_utf8(&rd_file.filename)
+                .unwrap()
+                .trim_matches(char::from(0));
+            if name == path {
+                return Ok(File {
+                    name: name.to_owned(),
+                    path: name.to_owned(),
+                    r#type: "file".to_owned(),
+                    size: rd_file.size as u64,
+                    ptr: Some(unsafe {
+                        self.data.as_ptr().add(
+                            rd_file.offset as usize
+                                + file_count as usize * core::mem::size_of::<RdFile>()
+                                + 1,
+                        ) as u64
+                    }),
+                });
+            }
+        }
+
+        Err(Error::FileDoesntExist)
     }
 
     fn read(&self, file: &File, buffer: &mut [u8]) -> Result<(), Error> {
-        todo!()
+        let file_count = self.data[0];
+
+        for i in 0..file_count {
+            let rd_file: RdFile = unsafe {
+                core::ptr::read(
+                    self.data
+                        .as_ptr()
+                        .add((i as usize) * core::mem::size_of::<RdFile>() + 1)
+                        as *const _,
+                )
+            };
+
+            let name = core::str::from_utf8(&rd_file.filename)
+                .unwrap()
+                .trim_matches(char::from(0));
+
+            if name == file.name {
+                let offset = rd_file.offset as usize
+                    + file_count as usize * core::mem::size_of::<RdFile>()
+                    + 1;
+
+                for j in offset..offset + rd_file.size {
+                    buffer[j - offset] = self.data[j];
+                }
+            }
+        }
+        Ok(())
     }
 }
 

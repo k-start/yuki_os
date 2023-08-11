@@ -33,6 +33,9 @@ impl Scheduler {
 
         memory::switch_to_pagetable(user_page_table_physaddr);
 
+        // let file_buf = if let Some(ptr) = file.ptr {
+        //     unsafe { core::slice::from_raw_parts_mut(ptr as *mut u8, file.size as usize) }
+        // } else {
         unsafe {
             memory::allocate_pages(
                 user_page_table_ptr,
@@ -50,6 +53,8 @@ impl Scheduler {
             core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.size as usize)
         };
         let _ = fs::vfs::read(&file, file_buf);
+        //     file_buf
+        // };
 
         let binary = ElfBinary::new(file_buf).unwrap();
         let mut loader = elf::loader::UserspaceElfLoader {

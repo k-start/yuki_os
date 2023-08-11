@@ -43,6 +43,7 @@ struct FileData {
 struct RdFile {
     filename: [u8; 32],
     size: usize,
+    offset: usize,
 }
 
 fn build_ramdisk() {
@@ -80,12 +81,15 @@ fn build_ramdisk() {
     let mut img_data: Vec<u8> = vec![];
 
     img_data.push(files.len() as u8);
+    let mut offset: usize = 0;
 
     for i in files.clone() {
         let mut rd_file = RdFile {
             filename: [0; 32],
             size: i.content.len(),
+            offset,
         };
+        offset += i.content.len();
 
         let mut filename_buf = &mut rd_file.filename[..];
         filename_buf.write(i.filename.as_bytes()).unwrap();
