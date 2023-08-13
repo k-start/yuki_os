@@ -1,5 +1,7 @@
 use core::fmt::{self, Write};
 
+use crate::syscalls;
+
 pub struct Writer {}
 
 impl Writer {
@@ -11,13 +13,7 @@ impl Writer {
 impl fmt::Write for Writer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         unsafe {
-            core::arch::asm!(
-                "mov rax, 1",
-                "mov rdi, 1",
-                "syscall",
-                in("rsi") s.as_ptr(),
-                in("rdx") s.len()
-            );
+            syscalls::write(1, s.as_bytes());
         }
         Ok(())
     }
