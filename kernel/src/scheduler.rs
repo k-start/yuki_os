@@ -17,6 +17,7 @@ lazy_static! {
 pub struct Scheduler {
     processes: Mutex<Vec<Process>>,
     cur_process: Mutex<Option<usize>>,
+    stdin_listen: Mutex<Vec<usize>>,
 }
 
 impl Scheduler {
@@ -24,6 +25,7 @@ impl Scheduler {
         Scheduler {
             processes: Mutex::new(Vec::new()),
             cur_process: Mutex::new(None), // so that next process is 0
+            stdin_listen: Mutex::new(Vec::new()),
         }
     }
 
@@ -168,6 +170,18 @@ impl Scheduler {
         // unsafe {
         //     core::arch::asm!("sti", "2:", "hlt", "jmp 2b");
         // }
+    }
+
+    pub fn stdin_listen(&self) {
+        self.cur_process.lock().map(|cur_process_idx| {
+            self.stdin_listen.lock().push(cur_process_idx);
+        });
+    }
+
+    pub fn push_stdin(&self, key: u8) {
+        for i in self.stdin_listen.lock().to_vec() {
+            let _ = &self.processes.lock()[i].vfs.write_stdin(&[key]);
+        }
     }
 }
 

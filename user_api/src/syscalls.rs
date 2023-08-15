@@ -1,4 +1,6 @@
+pub const READ: usize = 0;
 pub const WRITE: usize = 1;
+pub const OPEN: usize = 2;
 pub const EXIT: usize = 60;
 
 pub unsafe fn write(fd: i32, buf: &[u8]) -> isize {
@@ -14,6 +16,17 @@ pub unsafe fn write(fd: i32, buf: &[u8]) -> isize {
         options(nostack, preserves_flags)
     );
     r0
+}
+
+pub unsafe fn open(filename: &[u8]) {
+    core::arch::asm!(
+        "syscall",
+        in("rax") OPEN,
+        in("rdi") filename.as_ptr(), // Filename pointer
+        in("rsi") 0, // Flags
+        in("rdx") 0, // mode
+        options(nostack, preserves_flags)
+    );
 }
 
 pub unsafe fn exit() {

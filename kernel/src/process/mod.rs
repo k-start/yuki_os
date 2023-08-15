@@ -3,6 +3,8 @@ pub mod vfs;
 use core::fmt::Display;
 use x86_64::VirtAddr;
 
+use self::vfs::Vfs;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProcessState {
     // a task's state can either be
@@ -12,8 +14,9 @@ pub enum ProcessState {
 }
 
 pub struct Process {
-    pub state: ProcessState,  // the current state of the task
-    pub page_table_phys: u64, // the page table for this task
+    pub state: ProcessState,  // the current state of the process
+    pub page_table_phys: u64, // the page table for this process
+    pub vfs: Vfs,             // VFS gets us access to stdio
 }
 
 impl Process {
@@ -21,6 +24,7 @@ impl Process {
         Process {
             state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
+            vfs: Vfs::new(),
         }
     }
 }

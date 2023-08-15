@@ -42,11 +42,11 @@ pub fn init(boot_info: &'static mut BootInfo) {
     // let fs = fs::fatfs::FatFs::new(device);
 
     // fs::vfs::mount(fs);
-    let file = fs::vfs::open("a:/test-binary").unwrap();
+    // let file = fs::vfs::open("a:/test-binary").unwrap();
     let file2 = fs::vfs::open("a:/hello-world").unwrap();
 
     let sched = &scheduler::SCHEDULER;
-    sched.schedule(file);
+    // sched.schedule(file);
     sched.schedule(file2);
 
     x86_64::instructions::interrupts::enable();
