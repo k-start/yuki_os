@@ -4,28 +4,28 @@ use core::fmt::Display;
 use x86_64::VirtAddr;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum TaskState {
+pub enum ProcessState {
     // a task's state can either be
     SavedContext(Context),            // a saved context
     StartingInfo(VirtAddr, VirtAddr), // or a starting instruction and stack pointer
     Exiting(),
 }
 
-pub struct Task {
-    pub state: TaskState,     // the current state of the task
+pub struct Process {
+    pub state: ProcessState,  // the current state of the task
     pub page_table_phys: u64, // the page table for this task
 }
 
-impl Task {
-    pub fn new(exec_base: VirtAddr, stack_end: VirtAddr, page_table_phys: u64) -> Task {
-        Task {
-            state: TaskState::StartingInfo(exec_base, stack_end),
+impl Process {
+    pub fn new(exec_base: VirtAddr, stack_end: VirtAddr, page_table_phys: u64) -> Process {
+        Process {
+            state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
         }
     }
 }
 
-impl Display for Task {
+impl Display for Process {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,

@@ -2,7 +2,7 @@ use crate::{
     elf,
     fs::{self, filesystem::File},
     gdt, memory,
-    process::{Context, Task, TaskState},
+    process::{Context, Process, ProcessState},
 };
 use alloc::vec::Vec;
 use elfloader::ElfBinary;
@@ -15,15 +15,15 @@ lazy_static! {
 }
 
 pub struct Scheduler {
-    tasks: Mutex<Vec<Task>>,
-    cur_task: Mutex<Option<usize>>,
+    processes: Mutex<Vec<Process>>,
+    cur_process: Mutex<Option<usize>>,
 }
 
 impl Scheduler {
     pub fn new() -> Scheduler {
         Scheduler {
-            tasks: Mutex::new(Vec::new()),
-            cur_task: Mutex::new(None), // so that next task is 0
+            processes: Mutex::new(Vec::new()),
+            cur_process: Mutex::new(None), // so that next process is 0
         }
     }
 
@@ -89,60 +89,60 @@ impl Scheduler {
 
         memory::switch_to_pagetable(current_page_table_physaddr);
 
-        let task = Task::new(
+        let process = Process::new(
             VirtAddr::new(entry_point),
             VirtAddr::new(0x801000),
             user_page_table_physaddr,
         );
 
-        self.tasks.lock().push(task);
+        self.processes.lock().push(process);
     }
 
     pub fn save_current_context(&self, context: *const Context) {
-        self.cur_task.lock().map(|cur_task_idx| {
-            if self.tasks.lock()[cur_task_idx].state == TaskState::Exiting() {
-                self.tasks.lock().remove(cur_task_idx);
-                println!("Exited task #{}", cur_task_idx);
+        self.cur_process.lock().map(|cur_process_idx| {
+            if self.processes.lock()[cur_process_idx].state == ProcessState::Exiting() {
+                self.processes.lock().remove(cur_process_idx);
+                println!("Exited process #{}", cur_process_idx);
             } else {
                 let ctx = unsafe { (*context).clone() };
-                self.tasks.lock()[cur_task_idx].state = TaskState::SavedContext(ctx);
+                self.processes.lock()[cur_process_idx].state = ProcessState::SavedContext(ctx);
             }
         });
     }
 
     pub unsafe fn run_next(&self) -> Context {
-        let tasks_len = self.tasks.lock().len(); // how many tasks are available
-        if tasks_len > 0 {
-            let task_state = {
-                let mut cur_task_opt = self.cur_task.lock(); // lock the current task index
+        let processes_len = self.processes.lock().len(); // how many processes are available
+        if processes_len > 0 {
+            let process_state = {
+                let mut cur_process_opt = self.cur_process.lock(); // lock the current process index
 
-                let next_task = if cur_task_opt.is_none() {
-                    // properly start at task 0
+                let next_process = if cur_process_opt.is_none() {
+                    // properly start at process 0
                     0
                 } else {
-                    let cur_task = cur_task_opt.get_or_insert(0); // default to 0
-                    (*cur_task + 1) % tasks_len // next task index
+                    let cur_process = cur_process_opt.get_or_insert(0); // default to 0
+                    (*cur_process + 1) % processes_len // next process index
                 };
 
-                let cur_task = cur_task_opt.get_or_insert(tasks_len);
-                *cur_task = next_task;
-                let task = &self.tasks.lock()[next_task]; // get the next task
+                let cur_process = cur_process_opt.get_or_insert(processes_len);
+                *cur_process = next_process;
+                let process = &self.processes.lock()[next_process]; // get the next process
 
-                println!("Switching to task #{} ({})", next_task, task);
+                println!("Switching to process #{} ({})", next_process, process);
 
-                memory::switch_to_pagetable(task.page_table_phys);
+                memory::switch_to_pagetable(process.page_table_phys);
 
-                task.state.clone() // clone task state information
+                process.state.clone() // clone process state information
             }; // release held locks
-            match task_state {
-                TaskState::SavedContext(context) => {
+            match process_state {
+                ProcessState::SavedContext(context) => {
                     return context; // either restore the saved context
                 }
-                TaskState::StartingInfo(exec_base, stack_end) => {
-                    jmp_to_usermode(exec_base, stack_end); // or initialize the task with the given instruction, stack pointers
+                ProcessState::StartingInfo(exec_base, stack_end) => {
+                    jmp_to_usermode(exec_base, stack_end); // or initialize the process with the given instruction, stack pointers
                     todo!();
                 }
-                TaskState::Exiting() => {
+                ProcessState::Exiting() => {
                     todo!();
                 }
             }
@@ -153,13 +153,13 @@ impl Scheduler {
 
     pub fn exit_current(&self) {
         // FIX ME - janky exiting due to TSS not set up for syscall
-        self.cur_task.lock().map(|cur_task_idx| {
-            println!("Exiting task #{}", cur_task_idx);
-            self.tasks.lock()[cur_task_idx].state = TaskState::Exiting();
+        self.cur_process.lock().map(|cur_process_idx| {
+            println!("Exiting process #{}", cur_process_idx);
+            self.processes.lock()[cur_process_idx].state = ProcessState::Exiting();
         });
 
-        // let next_task = (*cur_task + 1) % tasks_len;
-        // *cur_task = next_task;
+        // let next_process = (*cur_process + 1) % processes_len;
+        // *cur_process = next_process;
         // unsafe {
         //     self.run_next();
         // };
