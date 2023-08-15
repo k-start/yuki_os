@@ -21,6 +21,6 @@ pub unsafe fn exit() {
         "syscall",
         in("rax") EXIT,
         in("rdi") 0,
-        options(noreturn)
+        options(nostack, preserves_flags)
     );
 }

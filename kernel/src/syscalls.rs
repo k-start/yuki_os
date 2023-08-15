@@ -2,6 +2,8 @@ use core::arch::asm;
 
 use x86_64::{structures::idt::InterruptStackFrame, VirtAddr};
 
+use crate::scheduler;
+
 const MSR_STAR: usize = 0xc0000081;
 const MSR_LSTAR: usize = 0xc0000082;
 const MSR_FMASK: usize = 0xc0000084;
@@ -86,14 +88,22 @@ pub struct Registers {
     pub rax: usize,
 }
 
-fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
-    // println!("syscall {:?} {:?}", stack_frame, regs);
-    unsafe {
-        let slice: &[u8] =
-            core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx);
+pub const WRITE: usize = 1;
+pub const EXIT: usize = 60;
 
-        let string = core::str::from_utf8(slice).unwrap();
-        print!("{string}");
+fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
+    match regs.rax {
+        WRITE => unsafe {
+            let slice: &[u8] =
+                core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx);
+
+            let string = core::str::from_utf8(slice).unwrap();
+            print!("{string}");
+        },
+        EXIT => {
+            scheduler::SCHEDULER.exit_current();
+        }
+        _ => {}
     }
     regs.rax = 0;
 }

@@ -1,7 +1,4 @@
-use crate::{
-    gdt,
-    scheduler::{self, Context},
-};
+use crate::{gdt, process::Context, scheduler};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spin;

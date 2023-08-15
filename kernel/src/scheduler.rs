@@ -2,9 +2,9 @@ use crate::{
     elf,
     fs::{self, filesystem::File},
     gdt, memory,
+    process::{Context, Task, TaskState},
 };
 use alloc::vec::Vec;
-use core::fmt::Display;
 use elfloader::ElfBinary;
 use lazy_static::lazy_static;
 use spin::Mutex;
@@ -96,13 +96,17 @@ impl Scheduler {
         );
 
         self.tasks.lock().push(task);
-        println!("{}", self.tasks.lock().len());
     }
 
     pub fn save_current_context(&self, context: *const Context) {
         self.cur_task.lock().map(|cur_task_idx| {
-            let ctx = unsafe { (*context).clone() };
-            self.tasks.lock()[cur_task_idx].state = TaskState::SavedContext(ctx);
+            if self.tasks.lock()[cur_task_idx].state == TaskState::Exiting() {
+                self.tasks.lock().remove(cur_task_idx);
+                println!("Exited task #{}", cur_task_idx);
+            } else {
+                let ctx = unsafe { (*context).clone() };
+                self.tasks.lock()[cur_task_idx].state = TaskState::SavedContext(ctx);
+            }
         });
     }
 
@@ -111,8 +115,16 @@ impl Scheduler {
         if tasks_len > 0 {
             let task_state = {
                 let mut cur_task_opt = self.cur_task.lock(); // lock the current task index
-                let cur_task = cur_task_opt.get_or_insert(0); // default to 0
-                let next_task = (*cur_task + 1) % tasks_len; // next task index
+
+                let next_task = if cur_task_opt.is_none() {
+                    // properly start at task 0
+                    0
+                } else {
+                    let cur_task = cur_task_opt.get_or_insert(0); // default to 0
+                    (*cur_task + 1) % tasks_len // next task index
+                };
+
+                let cur_task = cur_task_opt.get_or_insert(tasks_len);
                 *cur_task = next_task;
                 let task = &self.tasks.lock()[next_task]; // get the next task
 
@@ -130,65 +142,32 @@ impl Scheduler {
                     jmp_to_usermode(exec_base, stack_end); // or initialize the task with the given instruction, stack pointers
                     todo!();
                 }
+                TaskState::Exiting() => {
+                    todo!();
+                }
             }
         }
+
         todo!();
     }
-}
 
-#[derive(Debug, Clone)]
-#[repr(C, packed)]
-pub struct Context {
-    pub rbp: u64,
-    pub rax: u64,
-    pub rbx: u64,
-    pub rcx: u64,
-    pub rdx: u64,
-    pub rsi: u64,
-    pub rdi: u64,
-    pub r8: u64,
-    pub r9: u64,
-    pub r10: u64,
-    pub r11: u64,
-    pub r12: u64,
-    pub r13: u64,
-    pub r14: u64,
-    pub r15: u64,
-    pub rip: u64,
-    pub cs: u64,
-    pub rflags: u64,
-    pub rsp: u64,
-    pub ss: u64,
-}
+    pub fn exit_current(&self) {
+        // FIX ME - janky exiting due to TSS not set up for syscall
+        self.cur_task.lock().map(|cur_task_idx| {
+            println!("Exiting task #{}", cur_task_idx);
+            self.tasks.lock()[cur_task_idx].state = TaskState::Exiting();
+        });
 
-#[derive(Clone, Debug)]
-enum TaskState {
-    // a task's state can either be
-    SavedContext(Context),            // a saved context
-    StartingInfo(VirtAddr, VirtAddr), // or a starting instruction and stack pointer
-}
-
-struct Task {
-    state: TaskState,     // the current state of the task
-    page_table_phys: u64, // the page table for this task
-}
-
-impl Task {
-    pub fn new(exec_base: VirtAddr, stack_end: VirtAddr, page_table_phys: u64) -> Task {
-        Task {
-            state: TaskState::StartingInfo(exec_base, stack_end),
-            page_table_phys,
-        }
-    }
-}
-
-impl Display for Task {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "PT: {}, Context: {:x?}",
-            self.page_table_phys, self.state
-        )
+        // let next_task = (*cur_task + 1) % tasks_len;
+        // *cur_task = next_task;
+        // unsafe {
+        //     self.run_next();
+        // };
+        // x86_64::instructions::interrupts::enable();
+        // hlt_loop();
+        // unsafe {
+        //     core::arch::asm!("sti", "2:", "hlt", "jmp 2b");
+        // }
     }
 }
 

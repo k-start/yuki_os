@@ -22,4 +22,5 @@ pub unsafe extern "C" fn _start() {
     #[cfg(not(test))]
     main();
     syscalls::exit();
+    loop {}
 }

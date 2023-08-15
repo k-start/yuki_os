@@ -2,6 +2,7 @@
 #![feature(abi_x86_interrupt)]
 #![feature(const_mut_refs)]
 #![feature(naked_functions)]
+#![feature(asm_const)]
 
 use bootloader_api::BootInfo;
 
@@ -14,6 +15,7 @@ pub mod fs;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;
+pub mod process;
 pub mod scheduler;
 pub mod syscalls;
 
@@ -80,3 +82,28 @@ pub fn hlt_loop() -> ! {
         x86_64::instructions::hlt();
     }
 }
+
+// pub unsafe fn get_context() -> scheduler::Context {
+//     let ctxp: *const scheduler::Context;
+//     core::arch::asm!(
+//         "push rbp",
+//         "push rax",
+//         "push rbx",
+//         "push rcx",
+//         "push rdx",
+//         "push rsi",
+//         "push rdi",
+//         "push r8",
+//         "push r9",
+//         "push r10",
+//         "push r11",
+//         "push r12",
+//         "push r13",
+//         "push r14",
+//         "push r15",
+//         "mov {}, rsp",
+//         "sub rsp, 0x400",
+//     out(reg) ctxp);
+//     let ret: scheduler::Context = core::ptr::read(ctxp);
+//     ret
+// }
