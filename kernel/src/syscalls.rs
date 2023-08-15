@@ -89,12 +89,20 @@ pub struct Registers {
     pub rax: usize,
 }
 
+pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
 pub const EXIT: usize = 60;
 
 fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
     match regs.rax {
+        READ => {
+            if regs.rdi == 0 {
+                let buf: &mut [u8] =
+                    unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
+                scheduler::SCHEDULER.pop_stdin(buf);
+            }
+        }
         WRITE => unsafe {
             let slice: &[u8] =
                 core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx);

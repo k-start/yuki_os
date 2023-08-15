@@ -10,7 +10,12 @@ fn main() {
         user_api::syscalls::open(b"stdin");
     };
     loop {
-
-        // println!("hello from app");
+        let mut x: [u8; 1] = [0; 1];
+        unsafe {
+            user_api::syscalls::read(0, &mut x);
+        };
+        if x != [0] {
+            println!("{:?}", x);
+        }
     }
 }

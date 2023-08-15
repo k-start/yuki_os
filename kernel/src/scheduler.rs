@@ -183,6 +183,12 @@ impl Scheduler {
             let _ = &self.processes.lock()[i].vfs.write_stdin(&[key]);
         }
     }
+
+    pub fn pop_stdin(&self, buf: &mut [u8]) {
+        for i in self.stdin_listen.lock().to_vec() {
+            let _ = &self.processes.lock()[i].vfs.read_stdin(buf);
+        }
+    }
 }
 
 #[inline(never)]
