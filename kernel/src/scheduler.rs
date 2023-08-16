@@ -17,7 +17,6 @@ lazy_static! {
 pub struct Scheduler {
     processes: Mutex<Vec<Process>>,
     cur_process: Mutex<Option<usize>>,
-    stdin_listen: Mutex<Vec<usize>>,
 }
 
 impl Scheduler {
@@ -25,7 +24,6 @@ impl Scheduler {
         Scheduler {
             processes: Mutex::new(Vec::new()),
             cur_process: Mutex::new(None), // so that next process is 0
-            stdin_listen: Mutex::new(Vec::new()),
         }
     }
 
@@ -130,7 +128,7 @@ impl Scheduler {
                 *cur_process = next_process;
                 let process = &self.processes.lock()[next_process]; // get the next process
 
-                println!("Switching to process #{} ({})", next_process, process);
+                // println!("Switching to process #{} ({})", next_process, process);
 
                 memory::switch_to_pagetable(process.page_table_phys);
 
@@ -172,22 +170,17 @@ impl Scheduler {
         // }
     }
 
-    pub fn stdin_listen(&self) {
-        self.cur_process.lock().map(|cur_process_idx| {
-            self.stdin_listen.lock().push(cur_process_idx);
-        });
-    }
-
     pub fn push_stdin(&self, key: u8) {
-        for i in self.stdin_listen.lock().to_vec() {
-            let _ = &self.processes.lock()[i].vfs.write_stdin(&[key]);
+        let mut processes = self.processes.lock();
+        for i in 0..processes.len() {
+            let _ = processes[i].vfs.write_stdin(&[key]);
         }
     }
 
     pub fn pop_stdin(&self, buf: &mut [u8]) {
-        for i in self.stdin_listen.lock().to_vec() {
-            let _ = &self.processes.lock()[i].vfs.read_stdin(buf);
-        }
+        self.cur_process.lock().map(|cur_process_idx| {
+            let _ = &self.processes.lock()[cur_process_idx].vfs.read_stdin(buf);
+        });
     }
 }
 

@@ -111,15 +111,11 @@ fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) 
             print!("{string}");
         },
         OPEN => {
-            // ONLY implemented for STDIN opening
-            let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
+            let _filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
                 .to_str()
                 .unwrap()
                 .to_owned();
 
-            if filename == "stdin" {
-                scheduler::SCHEDULER.stdin_listen();
-            }
             // println!("open {filename}");
         }
         EXIT => {
