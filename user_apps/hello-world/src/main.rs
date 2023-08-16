@@ -12,7 +12,7 @@ fn main() {
             user_api::syscalls::read(0, &mut x);
         };
         if x != [0] {
-            println!("{:?}", x);
+            print!("{}", x[0] as char);
         }
     }
 }
