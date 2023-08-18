@@ -48,6 +48,16 @@ pub fn read(file: &FileDescriptor, buf: &mut [u8]) -> Result<(), Error> {
     }
 }
 
+pub fn write(file: &FileDescriptor, buf: &[u8]) -> Result<(), Error> {
+    let fs = FS.lock();
+
+    if let Some(device) = fs.get(&file.device) {
+        device.write(&file.file, buf)
+    } else {
+        Err(Error::DeviceDoesntExist)
+    }
+}
+
 pub fn list_dir(path: &str) -> Result<Vec<FileDescriptor>, Error> {
     let fs = FS.lock();
     let mount_point = get_mount_point(path);

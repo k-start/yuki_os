@@ -93,6 +93,7 @@ impl Scheduler {
             VirtAddr::new(entry_point),
             VirtAddr::new(0x801000),
             user_page_table_physaddr,
+            self.processes.lock().len() as u32,
         );
 
         self.processes.lock().push(process);
@@ -171,15 +172,33 @@ impl Scheduler {
     }
 
     pub fn push_stdin(&self, key: u8) {
-        let mut processes = self.processes.lock();
+        let processes = self.processes.lock();
         for i in 0..processes.len() {
-            let _ = processes[i].vfs.write_stdin(&[key]);
+            let _ = fs::vfs::write(processes[i].file_descriptors.get(&0).unwrap(), &[key]);
         }
     }
 
-    pub fn pop_stdin(&self, buf: &mut [u8]) {
+    pub fn write_file_descriptor(&self, id: u32, buf: &[u8]) {
         self.cur_process.lock().map(|cur_process_idx| {
-            let _ = &self.processes.lock()[cur_process_idx].vfs.read_stdin(buf);
+            let _ = fs::vfs::write(
+                self.processes.lock()[cur_process_idx]
+                    .file_descriptors
+                    .get(&id)
+                    .unwrap(),
+                buf,
+            );
+        });
+    }
+
+    pub fn read_file_descriptor(&self, id: u32, buf: &mut [u8]) {
+        self.cur_process.lock().map(|cur_process_idx| {
+            let _ = fs::vfs::read(
+                self.processes.lock()[cur_process_idx]
+                    .file_descriptors
+                    .get(&id)
+                    .unwrap(),
+                buf,
+            );
         });
     }
 }

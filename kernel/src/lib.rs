@@ -6,6 +6,8 @@
 
 use bootloader_api::BootInfo;
 
+use crate::fs::stdio::StdioFs;
+
 #[macro_use]
 pub mod print;
 
@@ -37,6 +39,10 @@ pub fn init(boot_info: &'static mut BootInfo) {
     let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
     let initrd = fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize);
     fs::vfs::mount("initrd", initrd);
+
+    let stdiofs = StdioFs::new();
+    fs::vfs::mount("stdio", stdiofs);
+
     println!("{:?}", fs::vfs::list_dir("/initrd"));
 
     // let device = fs::fat32ata::Fat32Ata::new(0);
@@ -49,6 +55,8 @@ pub fn init(boot_info: &'static mut BootInfo) {
     let sched = &scheduler::SCHEDULER;
     // sched.schedule(file);
     sched.schedule(file2);
+
+    println!("{:?}", fs::vfs::list_dir("/stdio"));
 
     x86_64::instructions::interrupts::enable();
 }

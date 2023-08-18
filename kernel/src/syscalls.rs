@@ -97,11 +97,9 @@ pub const EXIT: usize = 60;
 fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
     match regs.rax {
         READ => {
-            if regs.rdi == 0 {
-                let buf: &mut [u8] =
-                    unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
-                scheduler::SCHEDULER.pop_stdin(buf);
-            }
+            let buf: &mut [u8] =
+                unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
+            scheduler::SCHEDULER.read_file_descriptor(regs.rdi as u32, buf)
         }
         WRITE => unsafe {
             let slice: &[u8] =

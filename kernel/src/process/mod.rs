@@ -1,9 +1,7 @@
-pub mod vfs;
-
+use crate::fs::{self, filesystem::FileDescriptor};
+use alloc::{collections::BTreeMap, format};
 use core::fmt::Display;
 use x86_64::VirtAddr;
-
-use self::vfs::Vfs;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProcessState {
@@ -16,15 +14,19 @@ pub enum ProcessState {
 pub struct Process {
     pub state: ProcessState,  // the current state of the process
     pub page_table_phys: u64, // the page table for this process
-    pub vfs: Vfs,             // VFS gets us access to stdio
+    pub file_descriptors: BTreeMap<u32, FileDescriptor>, // file descriptors for Stdio
 }
 
 impl Process {
-    pub fn new(exec_base: VirtAddr, stack_end: VirtAddr, page_table_phys: u64) -> Process {
+    pub fn new(exec_base: VirtAddr, stack_end: VirtAddr, page_table_phys: u64, id: u32) -> Process {
+        let mut file_descriptors = BTreeMap::new();
+        file_descriptors.insert(0, fs::vfs::open(&format!("/stdio/{id}/stdin")).unwrap());
+        file_descriptors.insert(1, fs::vfs::open(&format!("/stdio/{id}/stdout")).unwrap());
+
         Process {
             state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
-            vfs: Vfs::new(),
+            file_descriptors,
         }
     }
 }

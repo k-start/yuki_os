@@ -85,7 +85,7 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
         Ok(())
     }
 
-    fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error> {
+    fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {
         todo!()
     }
 }
