@@ -17,6 +17,9 @@ pub fn init() {}
 
 pub fn mount<T: FileSystem + Send + 'static>(mountpoint: &str, filesystem: T) {
     let mut fs = FS.lock();
+    if mountpoint.contains("/") {
+        todo!("mountpoint cant contain a /")
+    }
     fs.insert(mountpoint.to_owned(), Box::new(filesystem));
 }
 
