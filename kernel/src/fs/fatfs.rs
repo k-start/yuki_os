@@ -72,7 +72,7 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
         Err(Error::FileDoesntExist)
     }
 
-    fn read(&self, file: &File, buffer: &mut [u8]) -> Result<(), Error> {
+    fn read(&self, file: &File, buf: &mut [u8]) -> Result<(), Error> {
         let fs = &self.fs;
         let dir = fs.root_dir();
 
@@ -80,9 +80,13 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
             .open_file(&file.path)
             .map_err(|_| Error::FileDoesntExist)?;
 
-        file.read_exact(buffer).map_err(|_| Error::ReadError)?;
+        file.read_exact(buf).map_err(|_| Error::ReadError)?;
 
         Ok(())
+    }
+
+    fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error> {
+        todo!()
     }
 }
 

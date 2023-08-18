@@ -99,6 +99,10 @@ impl super::filesystem::FileSystem for StdioFs<'_> {
             Err(_) => return Err(Error::FileDoesntExist),
         };
     }
+
+    fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error> {
+        todo!()
+    }
 }
 
 pub struct Stdio {

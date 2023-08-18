@@ -118,6 +118,10 @@ impl super::filesystem::FileSystem for InitRd<'_> {
         }
         Ok(())
     }
+
+    fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {
+        panic!("Can't write to initrd")
+    }
 }
 
 impl InitRd<'_> {
