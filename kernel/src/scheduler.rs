@@ -1,6 +1,6 @@
 use crate::{
     elf,
-    fs::{self, filesystem::File},
+    fs::{self, filesystem::FileDescriptor},
     gdt, memory,
     process::{Context, Process, ProcessState},
 };
@@ -27,7 +27,7 @@ impl Scheduler {
         }
     }
 
-    pub fn schedule(&self, file: File) {
+    pub fn schedule(&self, file: FileDescriptor) {
         let (_current_page_table_ptr, current_page_table_physaddr) = memory::active_page_table();
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
@@ -40,7 +40,7 @@ impl Scheduler {
             memory::allocate_pages(
                 user_page_table_ptr,
                 VirtAddr::new(0x500000000000),
-                file.size as u64,
+                file.file.size as u64,
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
@@ -50,7 +50,7 @@ impl Scheduler {
 
         // fix me - terrible loading
         let file_buf: &mut [u8] = unsafe {
-            core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.size as usize)
+            core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.file.size as usize)
         };
         let _ = fs::vfs::read(&file, file_buf);
         //     file_buf
@@ -69,7 +69,7 @@ impl Scheduler {
             memory::deallocate_pages(
                 user_page_table_ptr,
                 VirtAddr::new(0x500000000000),
-                file.size as u64,
+                file.file.size as u64,
             )
             .expect("Could not deallocate memory");
         }

@@ -24,3 +24,9 @@ pub struct File {
     pub size: u64,
     pub ptr: Option<u64>,
 }
+
+#[derive(Default, Debug, Clone)]
+pub struct FileDescriptor {
+    pub file: File,
+    pub device: String,
+}

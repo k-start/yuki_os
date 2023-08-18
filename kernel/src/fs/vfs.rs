@@ -1,54 +1,77 @@
-use crate::fs::filesystem::{Error, File, FileSystem};
+use crate::fs::filesystem::{Error, FileDescriptor, FileSystem};
+use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::format;
+use alloc::string::String;
 use alloc::vec::Vec;
 use lazy_static::lazy_static;
 use spin::Mutex;
 
 lazy_static! {
-    static ref FS: Mutex<Vec<Box<dyn FileSystem + Send>>> = Mutex::new(Vec::new());
+    static ref FS: Mutex<BTreeMap<String, Box<dyn FileSystem + Send>>> =
+        Mutex::new(BTreeMap::new());
 }
 
 pub fn init() {}
 
-pub fn mount<T: FileSystem + Send + 'static>(filesystem: T) {
+pub fn mount<T: FileSystem + Send + 'static>(mountpoint: &str, filesystem: T) {
     let mut fs = FS.lock();
-    fs.push(Box::new(filesystem));
+    fs.insert(mountpoint.to_owned(), Box::new(filesystem));
 }
 
-pub fn open(path: &str) -> Result<File, Error> {
+pub fn open(path: &str) -> Result<FileDescriptor, Error> {
     let fs = FS.lock();
-    let (device, path) = get_device(path);
+    let mount_point = get_mount_point(path);
+    let path = remove_mount_point(path, mount_point);
 
-    if device as usize >= fs.len() {
-        return Err(Error::DeviceDoesntExist);
+    if let Some(device) = fs.get(mount_point) {
+        Ok(FileDescriptor {
+            file: device.open(&path)?,
+            device: mount_point.to_owned(),
+        })
+    } else {
+        Err(Error::DeviceDoesntExist)
     }
-
-    fs[device as usize].open(path)
 }
 
-pub fn read(file: &File, buf: &mut [u8]) -> Result<(), Error> {
+pub fn read(file: &FileDescriptor, buf: &mut [u8]) -> Result<(), Error> {
     let fs = FS.lock();
 
-    fs[0].read(file, buf)
+    if let Some(device) = fs.get(&file.device) {
+        device.read(&file.file, buf)
+    } else {
+        Err(Error::DeviceDoesntExist)
+    }
 }
 
-pub fn list_dir(path: &str) -> Result<Vec<File>, Error> {
+pub fn list_dir(path: &str) -> Result<Vec<FileDescriptor>, Error> {
     let fs = FS.lock();
-    let (device, path) = get_device(path);
+    let mount_point = get_mount_point(path);
+    let path = remove_mount_point(path, mount_point);
 
-    if device as usize >= fs.len() {
-        return Err(Error::DeviceDoesntExist);
+    if let Some(device) = fs.get(mount_point) {
+        Ok(device
+            .dir_entries(&path)?
+            .iter()
+            .map(|f| FileDescriptor {
+                file: f.clone(),
+                device: mount_point.to_owned(),
+            })
+            .collect())
+    } else {
+        Err(Error::DeviceDoesntExist)
     }
-
-    fs[device as usize].dir_entries(path)
 }
 
-fn get_device(path: &str) -> (u8, &str) {
-    let split: Vec<&str> = path.split(":/").collect();
+fn get_mount_point(path: &str) -> &str {
+    let split: Vec<&str> = path.split("/").collect();
+    let mount_point = *split.get(1).unwrap_or(&"");
 
-    if split.len() != 2 {
-        return (100, "");
-    }
+    mount_point
+}
 
-    (split[0].chars().next().unwrap() as u8 - b'a', split[1])
+fn remove_mount_point(path: &str, mount_point: &str) -> String {
+    path.replace(&format!("/{mount_point}/"), "")
+        .replace(&format!("/{mount_point}"), "")
 }
