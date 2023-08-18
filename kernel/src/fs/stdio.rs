@@ -27,7 +27,7 @@ impl super::filesystem::FileSystem for StdioFs {
             }
             return Ok(ret);
         } else {
-            let proc_id: u32 = dir.replace("/", "").parse().unwrap();
+            let proc_id: u32 = dir.parse().unwrap();
             if let Some(io) = self.fs.lock().get(&proc_id) {
                 ret.push(File {
                     name: format!("stdin"),
@@ -43,6 +43,7 @@ impl super::filesystem::FileSystem for StdioFs {
                     size: io.stdout.lock().len() as u64,
                     ptr: None,
                 });
+                return Ok(ret);
             }
         }
 
@@ -51,20 +52,17 @@ impl super::filesystem::FileSystem for StdioFs {
 
     fn open(&self, path: &str) -> Result<File, Error> {
         let split: Vec<&str> = path.split("/").collect();
-        println!("1 - {split:?}");
         if split.len() != 2 {
             return Err(Error::FileDoesntExist);
         }
 
         let proc_id = split[0].parse::<u32>();
-        println!("2 - {proc_id:?}");
         // if !split[1].eq("stdin") || !split[1].eq("stdout") {
         //     return Err(Error::FileDoesntExist);
         // }
 
         match proc_id {
             Ok(id) => {
-                println!("3 - {id:?}");
                 if let Some(_stdio) = self.fs.lock().get(&id) {
                     return Ok(File {
                         name: split[1].to_string(),
@@ -75,7 +73,6 @@ impl super::filesystem::FileSystem for StdioFs {
                     });
                 }
                 self.fs.lock().insert(id, Stdio::new());
-                println!("4 - {id:?}");
                 return Ok(File {
                     name: split[1].to_string(),
                     path: path.to_string(),
@@ -143,6 +140,7 @@ impl StdioFs {
     }
 }
 
+#[derive(Debug)]
 pub struct Stdio {
     stdout: Mutex<VecDeque<u8>>,
     stdin: Mutex<VecDeque<u8>>,
