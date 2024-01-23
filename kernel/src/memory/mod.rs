@@ -283,11 +283,11 @@ pub unsafe fn deallocate_pages(
         Page::range_inclusive(start_page, end_page)
     };
 
-    // FIX ME - deallocate frame
+    // FIX ME - Create better frame allocator that allows deallocation in future
     for page in page_range {
-        //     let phys = mapper
-        //         .translate_page(page)
-        //         .map_err(|_| UnmapError::PageNotMapped)?;
+        // let phys = mapper
+        //     .translate_page(page)
+        //     .map_err(|_| UnmapError::PageNotMapped)?;
         mapper.unmap(page)?.1.flush();
 
         // memory_info.frame_allocator.deallocate_frame(phys);

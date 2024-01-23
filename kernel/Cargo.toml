@@ -15,8 +15,8 @@ name = "kernel_lib"
 path = "src/lib.rs"
 
 [dependencies]
-bootloader_api = "0.11.3"
-x86_64 = "0.14.10"
+bootloader_api = "0.11.5"
+x86_64 = "0.14.11"
 spin = "0.9.8"
 pic8259 = "0.10.4"
 uart_16550 = "0.2.18"
