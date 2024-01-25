@@ -1,6 +1,8 @@
 pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
+pub const GET_PID: usize = 39;
+pub const FORK: usize = 57;
 pub const EXIT: usize = 60;
 
 pub unsafe fn read(fd: i32, buf: &mut [u8]) {
@@ -38,6 +40,26 @@ pub unsafe fn open(filename: &[u8]) {
         in("rdx") 0, // mode
         options(nostack, preserves_flags)
     );
+}
+
+pub unsafe fn get_pid() -> isize {
+    let r0;
+    core::arch::asm!(
+        "syscall",
+        inlateout("rax") GET_PID => r0,
+        options(nostack, preserves_flags)
+    );
+    r0
+}
+
+pub unsafe fn fork() -> isize {
+    let r0;
+    core::arch::asm!(
+        "syscall",
+        inlateout("rax") FORK => r0,
+        options(nostack, preserves_flags)
+    );
+    r0
 }
 
 pub unsafe fn exit() {

@@ -92,6 +92,8 @@ pub struct Registers {
 pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
+pub const GET_PID: usize = 39;
+pub const FORK: usize = 57;
 pub const EXIT: usize = 60;
 
 fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) {
@@ -115,6 +117,9 @@ fn handle_syscall(_stack_frame: &mut InterruptStackFrame, regs: &mut Registers) 
                 .to_owned();
 
             // println!("open {filename}");
+        }
+        GET_PID => {
+            regs.rax = scheduler::SCHEDULER.get_cur_pid();
         }
         EXIT => {
             scheduler::SCHEDULER.exit_current();

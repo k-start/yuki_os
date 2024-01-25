@@ -201,6 +201,10 @@ impl Scheduler {
             );
         });
     }
+
+    pub fn get_cur_pid(&self) -> usize {
+        self.cur_process.lock().unwrap_or(0)
+    }
 }
 
 #[inline(never)]
