@@ -16,7 +16,20 @@ fn main() {
     //     }
     // }
 
-    println!("{}", unsafe { user_api::syscalls::get_pid() });
+    let mut pid = unsafe { user_api::syscalls::get_pid() };
+    println!("[{pid}] Forking...");
+
+    let fork_ret = unsafe { user_api::syscalls::fork() };
+
+    pid = unsafe { user_api::syscalls::get_pid() };
+
+    if fork_ret == 0 {
+        println!("[{pid}] Child");
+    } else {
+        println!("[{pid}] Parent");
+    }
+
+    println!("[{pid}] This should print twice");
 
     loop {}
 }

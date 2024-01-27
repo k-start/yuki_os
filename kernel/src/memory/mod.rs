@@ -195,6 +195,13 @@ pub fn create_new_user_pagetable() -> (*mut PageTable, u64) {
     (user_page_table_ptr, user_page_table_physaddr)
 }
 
+pub fn copy_user_pagetable(pagetable: &PageTable) -> (*mut PageTable, u64) {
+    // Copy pages
+    let (user_page_table_ptr, user_page_table_physaddr) = copy_pagetables(pagetable);
+
+    (user_page_table_ptr, user_page_table_physaddr)
+}
+
 pub fn switch_to_pagetable(physaddr: u64) {
     unsafe {
         asm!("mov cr3, {addr}",

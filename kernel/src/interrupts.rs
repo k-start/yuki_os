@@ -45,8 +45,10 @@ lazy_static! {
             idt.general_protection_fault
                 .set_handler_fn(general_protection_fault_handler)
                 .set_stack_index(gdt::GENERAL_PROTECTION_FAULT_IST_INDEX);
+            idt[InterruptIndex::Timer.as_usize()]
+                .set_handler_fn(timer_handler_naked)
+                .set_stack_index(gdt::TIMER_INTERRUPT_INDEX);
         }
-        idt[InterruptIndex::Timer.as_usize()].set_handler_fn(timer_handler_naked);
         idt[InterruptIndex::Keyboard.as_usize()].set_handler_fn(keyboard_interrupt_handler);
         idt
     };

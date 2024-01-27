@@ -26,7 +26,7 @@ impl Process {
         Process {
             state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
-            file_descriptors,
+            file_descriptors: file_descriptors,
         }
     }
 }
@@ -44,24 +44,24 @@ impl Display for Process {
 #[derive(Debug, Clone, PartialEq, Default)]
 #[repr(C, packed)]
 pub struct Context {
-    pub rbp: u64,
-    pub rax: u64,
-    pub rbx: u64,
-    pub rcx: u64,
-    pub rdx: u64,
-    pub rsi: u64,
-    pub rdi: u64,
-    pub r8: u64,
-    pub r9: u64,
-    pub r10: u64,
-    pub r11: u64,
-    pub r12: u64,
-    pub r13: u64,
-    pub r14: u64,
-    pub r15: u64,
-    pub rip: u64,
-    pub cs: u64,
-    pub rflags: u64,
-    pub rsp: u64,
-    pub ss: u64,
+    pub r15: usize,
+    pub r14: usize,
+    pub r13: usize,
+    pub r12: usize,
+    pub r11: usize,
+    pub r10: usize,
+    pub r9: usize,
+    pub r8: usize,
+    pub rbp: usize,
+    pub rsi: usize,
+    pub rdi: usize,
+    pub rdx: usize,
+    pub rcx: usize,
+    pub rbx: usize,
+    pub rax: usize,
+    pub rip: usize,
+    pub cs: usize,
+    pub rflags: usize,
+    pub rsp: usize,
+    pub ss: usize,
 }

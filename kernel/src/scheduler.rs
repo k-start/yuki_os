@@ -129,7 +129,7 @@ impl Scheduler {
                 *cur_process = next_process;
                 let process = &self.processes.lock()[next_process]; // get the next process
 
-                // println!("Switching to process #{} ({})", next_process, process);
+                // println!("Switching to process #{} ({})", cur_process, process);
 
                 memory::switch_to_pagetable(process.page_table_phys);
 
@@ -169,6 +169,54 @@ impl Scheduler {
         // unsafe {
         //     core::arch::asm!("sti", "2:", "hlt", "jmp 2b");
         // }
+    }
+
+    pub fn fork_current(&self, context: Context) -> usize {
+        let (current_page_table_ptr, _current_page_table_physaddr) = memory::active_page_table();
+        unsafe {
+            // FIX ME - implement copy on write later
+            memory::allocate_pages(
+                current_page_table_ptr,
+                VirtAddr::new(0x801000),
+                0x1000_u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .expect("Could not allocate memory");
+
+            let new_stack: &mut [u8] =
+                core::slice::from_raw_parts_mut(VirtAddr::new(0x801000).as_mut_ptr(), 0x1000);
+            let old_stack: &[u8] =
+                core::slice::from_raw_parts(VirtAddr::new(0x800000).as_ptr(), 0x1000);
+
+            for i in 0..0x1000 {
+                new_stack[i] = old_stack[i];
+            }
+        }
+        // Copy the pagetable, mostly sharing for now though - implement COW later
+        let (_user_page_table_ptr, user_page_table_physaddr) =
+            memory::copy_user_pagetable(current_page_table_ptr);
+
+        let child_process = self.cur_process.lock().map(|cur_process_idx| {
+            let cur_process = &self.processes.lock()[cur_process_idx];
+            let (code_selector, data_selector) = crate::gdt::get_usermode_segments();
+            let mut ctx = context.clone();
+
+            ctx.rax = 0;
+            ctx.rsp = ctx.rsp + 0x1000;
+            ctx.cs = code_selector.0 as usize;
+            ctx.ss = data_selector.0 as usize;
+            Process {
+                state: ProcessState::SavedContext(ctx),
+                page_table_phys: user_page_table_physaddr,
+                file_descriptors: cur_process.file_descriptors.clone(),
+            }
+        });
+
+        self.processes.lock().push(child_process.unwrap());
+
+        self.processes.lock().len()
     }
 
     pub fn push_stdin(&self, key: u8) {

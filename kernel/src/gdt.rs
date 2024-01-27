@@ -1,4 +1,5 @@
 use lazy_static::lazy_static;
+use spin::Mutex;
 use x86_64::instructions::segmentation::{CS, DS, SS};
 use x86_64::instructions::tables::load_tss;
 use x86_64::registers::segmentation::Segment;
@@ -11,9 +12,10 @@ use x86_64::{PrivilegeLevel, VirtAddr};
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 pub const PAGE_FAULT_IST_INDEX: u16 = 1;
 pub const GENERAL_PROTECTION_FAULT_IST_INDEX: u16 = 2;
+pub const TIMER_INTERRUPT_INDEX: u16 = 3;
 
 lazy_static! {
-    static ref TSS: TaskStateSegment = {
+    static ref TSS: Mutex<TaskStateSegment> = {
         let mut tss = TaskStateSegment::new();
         tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
             const STACK_SIZE: usize = 4096 * 5;
@@ -43,7 +45,9 @@ lazy_static! {
             let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
             stack_start + STACK_SIZE // stack_end
         };
-        tss
+        tss.interrupt_stack_table[TIMER_INTERRUPT_INDEX as usize] =
+        tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize];
+        Mutex::new(tss)
     };
 }
 
@@ -54,7 +58,7 @@ lazy_static! {
             DescriptorFlags::USER_SEGMENT | DescriptorFlags::PRESENT | DescriptorFlags::WRITABLE;
         let code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
         let data_selector = gdt.add_entry(Descriptor::UserSegment(kernel_data_flags.bits()));
-        let tss_selector = gdt.add_entry(Descriptor::tss_segment(&TSS));
+        let tss_selector = gdt.add_entry(Descriptor::tss_segment(unsafe { &tss_reference() }));
         let user_data_selector = gdt.add_entry(Descriptor::user_data_segment());
         let user_code_selector = gdt.add_entry(Descriptor::user_code_segment());
         (
@@ -102,4 +106,14 @@ pub fn set_usermode_segments() -> (u16, u16) {
         DS::set_reg(ds);
     }
     (cs.0, ds.0)
+}
+
+unsafe fn tss_reference() -> &'static TaskStateSegment {
+    let tss_ptr = &*TSS.lock() as *const TaskStateSegment;
+    &*tss_ptr
+}
+
+pub fn tss_address() -> u64 {
+    let tss_ptr = &*TSS.lock() as *const TaskStateSegment;
+    tss_ptr as u64
 }
