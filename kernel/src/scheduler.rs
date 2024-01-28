@@ -172,7 +172,7 @@ impl Scheduler {
     }
 
     pub fn fork_current(&self, context: Context) -> usize {
-        let (current_page_table_ptr, _current_page_table_physaddr) = memory::active_page_table();
+        let (current_page_table_ptr, current_page_table_physaddr) = memory::active_page_table();
         unsafe {
             // FIX ME - implement copy on write later
             memory::allocate_pages(
@@ -194,9 +194,6 @@ impl Scheduler {
                 new_stack[i] = old_stack[i];
             }
         }
-        // Copy the pagetable, mostly sharing for now though - implement COW later
-        let (_user_page_table_ptr, user_page_table_physaddr) =
-            memory::copy_user_pagetable(current_page_table_ptr);
 
         let child_process = self.cur_process.lock().map(|cur_process_idx| {
             let cur_process = &self.processes.lock()[cur_process_idx];
@@ -209,7 +206,7 @@ impl Scheduler {
             ctx.ss = data_selector.0 as usize;
             Process {
                 state: ProcessState::SavedContext(ctx),
-                page_table_phys: user_page_table_physaddr,
+                page_table_phys: current_page_table_physaddr, // Use same address space
                 file_descriptors: cur_process.file_descriptors.clone(),
             }
         });
