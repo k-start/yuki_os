@@ -4,7 +4,7 @@ use crate::{
     gdt, memory,
     process::{Context, Process, ProcessState},
 };
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec};
 use elfloader::ElfBinary;
 use lazy_static::lazy_static;
 use spin::Mutex;
@@ -129,7 +129,7 @@ impl Scheduler {
                 *cur_process = next_process;
                 let process = &self.processes.lock()[next_process]; // get the next process
 
-                // println!("Switching to process #{} ({})", cur_process, process);
+                println!("Switching to process #{} ({})", cur_process, process);
 
                 memory::switch_to_pagetable(process.page_table_phys);
 
@@ -214,6 +214,78 @@ impl Scheduler {
         self.processes.lock().push(child_process.unwrap());
 
         self.processes.lock().len()
+    }
+
+    // exec sys_call function. Differs from `schedule` as it executes on the currently running process
+    // rather than creating a new process and executing on that
+    pub fn exec(&self, context: &mut Context, filename: String) -> usize {
+        println!("{:?}", filename);
+        let file = fs::vfs::open(&filename).unwrap();
+
+        let (_current_page_table_ptr, _current_page_table_physaddr) = memory::active_page_table();
+        let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
+
+        memory::switch_to_pagetable(user_page_table_physaddr);
+
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(0x500000000000),
+                file.file.size as u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .expect("Could not allocate memory");
+        }
+
+        let file_buf: &mut [u8] = unsafe {
+            core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.file.size as usize)
+        };
+        let _ = fs::vfs::read(&file, file_buf);
+
+        let binary = ElfBinary::new(file_buf).unwrap();
+        let mut loader = elf::loader::UserspaceElfLoader {
+            vbase: 0x400000,
+            user_page_table_ptr,
+        };
+        binary.load(&mut loader).expect("Can't load the binary");
+
+        let entry_point = loader.vbase + binary.entry_point();
+
+        unsafe {
+            memory::deallocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(0x500000000000),
+                file.file.size as u64,
+            )
+            .expect("Could not deallocate memory");
+        }
+
+        // user heap
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(0x800000),
+                0x1000_u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .expect("Could not allocate memory");
+        }
+
+        context.rsp = 0x801000;
+        context.rip = entry_point as usize;
+        context.rcx = entry_point as usize;
+        let (code_selector, data_selector) = crate::gdt::get_usermode_segments();
+        context.cs = code_selector.0 as usize;
+        context.ss = data_selector.0 as usize;
+
+        self.cur_process.lock().map(|cur_process_idx| {
+            self.processes.lock()[cur_process_idx].page_table_phys = user_page_table_physaddr;
+        });
+        0
     }
 
     pub fn push_stdin(&self, key: u8) {

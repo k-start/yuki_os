@@ -3,6 +3,7 @@ pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
 pub const GET_PID: usize = 39;
 pub const FORK: usize = 57;
+pub const EXEC: usize = 59;
 pub const EXIT: usize = 60;
 
 pub unsafe fn read(fd: i32, buf: &mut [u8]) {
@@ -57,6 +58,18 @@ pub unsafe fn fork() -> isize {
     core::arch::asm!(
         "syscall",
         inlateout("rax") FORK => r0,
+        options(nostack, preserves_flags)
+    );
+    r0
+}
+
+// FIX ME - implement args
+pub unsafe fn exec(filename: &[u8]) -> isize {
+    let r0;
+    core::arch::asm!(
+        "syscall",
+        in("rdi") filename.as_ptr(),
+        inlateout("rax") EXEC => r0,
         options(nostack, preserves_flags)
     );
     r0

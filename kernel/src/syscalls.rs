@@ -149,6 +149,7 @@ pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
 pub const GET_PID: usize = 39;
 pub const FORK: usize = 57;
+pub const EXEC: usize = 59;
 pub const EXIT: usize = 60;
 
 // fn handle_syscall(stack_frame: &mut InterruptStackFrame, regs: &mut Context) {
@@ -187,6 +188,13 @@ fn handle_syscall(regs: &mut Context) {
                 scheduler::SCHEDULER.get_cur_pid()
             );
             regs.rax = scheduler::SCHEDULER.fork_current(regs.clone());
+        }
+        EXEC => {
+            let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
+                .to_str()
+                .unwrap()
+                .to_owned();
+            regs.rax = scheduler::SCHEDULER.exec(regs, filename);
         }
         EXIT => {
             scheduler::SCHEDULER.exit_current();

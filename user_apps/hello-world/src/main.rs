@@ -25,6 +25,7 @@ fn main() {
 
     if fork_ret == 0 {
         println!("[{pid}] Child");
+        let _exec_ret = unsafe { user_api::syscalls::exec(b"/initrd/test-binary\0") };
     } else {
         println!("[{pid}] Parent");
     }
