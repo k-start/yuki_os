@@ -41,7 +41,7 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
     }
 
     fn open(&self, path: &str) -> Result<File, Error> {
-        let split: Vec<&str> = path.split("/").collect();
+        let split: Vec<&str> = path.split('/').collect();
         let file_name = match split.last() {
             Some(x) => *x,
             None => return Err(Error::PathSplitError),

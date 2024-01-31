@@ -37,7 +37,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
     fs::vfs::init();
 
     let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
-    let initrd = fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize);
+    let initrd = unsafe { fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize) };
     fs::vfs::mount("initrd", initrd);
 
     let stdiofs = StdioFs::new();

@@ -13,7 +13,7 @@ struct RdFile {
 
 impl super::filesystem::FileSystem for InitRd<'_> {
     fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error> {
-        if dir != "" {
+        if !dir.is_empty() {
             return Err(Error::DirDoesntExist);
         }
 
@@ -111,9 +111,8 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                     + file_count as usize * core::mem::size_of::<RdFile>()
                     + 1;
 
-                for j in offset..offset + rd_file.size {
-                    buffer[j - offset] = self.data[j];
-                }
+                buffer[..(offset + rd_file.size - offset)]
+                    .copy_from_slice(&self.data[offset..(offset + rd_file.size)]);
             }
         }
         Ok(())
@@ -125,8 +124,14 @@ impl super::filesystem::FileSystem for InitRd<'_> {
 }
 
 impl InitRd<'_> {
-    pub fn new(ptr: *const u8, len: usize) -> Self {
-        let slice: &[u8] = unsafe { core::slice::from_raw_parts(ptr, len) };
+    /// Initialize a new OffsetPageTable.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe because it creates a slice from the pointer
+    /// provided
+    pub unsafe fn new(ptr: *const u8, len: usize) -> Self {
+        let slice: &[u8] = core::slice::from_raw_parts(ptr, len);
         InitRd { data: slice }
     }
 }

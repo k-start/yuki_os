@@ -19,6 +19,12 @@ pub struct Scheduler {
     cur_process: Mutex<Option<usize>>,
 }
 
+impl Default for Scheduler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Scheduler {
     pub fn new() -> Scheduler {
         Scheduler {
@@ -40,7 +46,7 @@ impl Scheduler {
             memory::allocate_pages(
                 user_page_table_ptr,
                 VirtAddr::new(0x500000000000),
-                file.file.size as u64,
+                file.file.size,
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
@@ -69,7 +75,7 @@ impl Scheduler {
             memory::deallocate_pages(
                 user_page_table_ptr,
                 VirtAddr::new(0x500000000000),
-                file.file.size as u64,
+                file.file.size,
             )
             .expect("Could not deallocate memory");
         }
@@ -99,19 +105,26 @@ impl Scheduler {
         self.processes.lock().push(process);
     }
 
-    pub fn save_current_context(&self, context: *const Context) {
+    /// Initialize a new OffsetPageTable.
+    ///
+    /// # Safety
+    ///
+    /// This function is unsafe as it derefences the context provided
+    /// This should only be called by the interrupt that is switching
+    /// contexts.
+    pub unsafe fn save_current_context(&self, context: *const Context) {
         self.cur_process.lock().map(|cur_process_idx| {
             if self.processes.lock()[cur_process_idx].state == ProcessState::Exiting() {
                 self.processes.lock().remove(cur_process_idx);
                 println!("Exited process #{}", cur_process_idx);
             } else {
-                let ctx = unsafe { (*context).clone() };
+                let ctx = (*context).clone();
                 self.processes.lock()[cur_process_idx].state = ProcessState::SavedContext(ctx);
             }
         });
     }
 
-    pub unsafe fn run_next(&self) -> Context {
+    pub fn run_next(&self) -> Context {
         let processes_len = self.processes.lock().len(); // how many processes are available
         if processes_len > 0 {
             let process_state = {
@@ -129,7 +142,7 @@ impl Scheduler {
                 *cur_process = next_process;
                 let process = &self.processes.lock()[next_process]; // get the next process
 
-                println!("Switching to process #{} ({})", cur_process, process);
+                // println!("Switching to process #{} ({})", cur_process, process);
 
                 memory::switch_to_pagetable(process.page_table_phys);
 
@@ -190,9 +203,7 @@ impl Scheduler {
             let old_stack: &[u8] =
                 core::slice::from_raw_parts(VirtAddr::new(0x800000).as_ptr(), 0x1000);
 
-            for i in 0..0x1000 {
-                new_stack[i] = old_stack[i];
-            }
+            new_stack.copy_from_slice(&old_stack[..0x1000]);
         }
 
         let child_process = self.cur_process.lock().map(|cur_process_idx| {
@@ -201,7 +212,7 @@ impl Scheduler {
             let mut ctx = context.clone();
 
             ctx.rax = 0;
-            ctx.rsp = ctx.rsp + 0x1000;
+            ctx.rsp += 0x1000;
             ctx.cs = code_selector.0 as usize;
             ctx.ss = data_selector.0 as usize;
             Process {
@@ -290,9 +301,9 @@ impl Scheduler {
 
     pub fn push_stdin(&self, key: u8) {
         let processes = self.processes.lock();
-        for i in 0..processes.len() {
-            let _ = fs::vfs::write(processes[i].file_descriptors.get(&0).unwrap(), &[key]);
-        }
+        // for i in 0..processes.len() {
+        let _ = fs::vfs::write(processes[0].file_descriptors.get(&0).unwrap(), &[key]);
+        // }
     }
 
     pub fn write_file_descriptor(&self, id: u32, buf: &[u8]) {

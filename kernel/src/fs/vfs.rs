@@ -17,7 +17,7 @@ pub fn init() {}
 
 pub fn mount<T: FileSystem + Send + 'static>(mountpoint: &str, filesystem: T) {
     let mut fs = FS.lock();
-    if mountpoint.contains("/") {
+    if mountpoint.contains('/') {
         todo!("mountpoint cant contain a /")
     }
     fs.insert(mountpoint.to_owned(), Box::new(filesystem));
@@ -78,7 +78,7 @@ pub fn list_dir(path: &str) -> Result<Vec<FileDescriptor>, Error> {
 }
 
 fn get_mount_point(path: &str) -> &str {
-    let split: Vec<&str> = path.split("/").collect();
+    let split: Vec<&str> = path.split('/').collect();
     let mount_point = *split.get(1).unwrap_or(&"");
 
     mount_point

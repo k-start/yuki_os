@@ -92,7 +92,7 @@ fn build_ramdisk() {
         offset += i.content.len();
 
         let mut filename_buf = &mut rd_file.filename[..];
-        filename_buf.write(i.filename.as_bytes()).unwrap();
+        filename_buf.write_all(i.filename.as_bytes()).unwrap();
 
         let mut bytes = unsafe { any_as_u8_slice(&rd_file) }.to_vec();
         img_data.append(&mut bytes);

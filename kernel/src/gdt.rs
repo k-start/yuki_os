@@ -21,28 +21,28 @@ lazy_static! {
             const STACK_SIZE: usize = 4096 * 5;
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
-            let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
+            let stack_start = VirtAddr::from_ptr(unsafe { core::ptr::addr_of!(STACK) });
             stack_start + STACK_SIZE // stack_end
         };
         tss.interrupt_stack_table[PAGE_FAULT_IST_INDEX as usize] = {
             const STACK_SIZE: usize = 4096 * 5;
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
-            let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
+            let stack_start = VirtAddr::from_ptr(unsafe { core::ptr::addr_of!(STACK) });
             stack_start + STACK_SIZE // stack_end
         };
         tss.interrupt_stack_table[GENERAL_PROTECTION_FAULT_IST_INDEX as usize] = {
             const STACK_SIZE: usize = 4096 * 5;
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
-            let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
+            let stack_start = VirtAddr::from_ptr(unsafe { core::ptr::addr_of!(STACK) });
             stack_start + STACK_SIZE // stack_end
         };
         tss.privilege_stack_table[0] = {
             const STACK_SIZE: usize = 4096 * 5;
             static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
 
-            let stack_start = VirtAddr::from_ptr(unsafe { &STACK });
+            let stack_start = VirtAddr::from_ptr(unsafe { core::ptr::addr_of!(STACK) });
             stack_start + STACK_SIZE // stack_end
         };
         tss.interrupt_stack_table[TIMER_INTERRUPT_INDEX as usize] =
@@ -58,7 +58,7 @@ lazy_static! {
             DescriptorFlags::USER_SEGMENT | DescriptorFlags::PRESENT | DescriptorFlags::WRITABLE;
         let code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
         let data_selector = gdt.add_entry(Descriptor::UserSegment(kernel_data_flags.bits()));
-        let tss_selector = gdt.add_entry(Descriptor::tss_segment(unsafe { &tss_reference() }));
+        let tss_selector = gdt.add_entry(Descriptor::tss_segment(unsafe { tss_reference() }));
         let user_data_selector = gdt.add_entry(Descriptor::user_data_segment());
         let user_code_selector = gdt.add_entry(Descriptor::user_code_segment());
         (

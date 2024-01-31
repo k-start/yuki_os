@@ -6,9 +6,13 @@ extern crate user_api;
 
 #[no_mangle]
 fn main() {
-    let mut i = 0;
     loop {
-        println!("{}", i);
-        i += 1;
+        let mut x: [u8; 1] = [0; 1];
+        unsafe {
+            user_api::syscalls::read(0, &mut x);
+        };
+        if x != [0] {
+            print!("{}", x[0] as char);
+        }
     }
 }

@@ -15,7 +15,7 @@ pub struct StdioFs {
 impl super::filesystem::FileSystem for StdioFs {
     fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error> {
         let mut ret: Vec<File> = Vec::new();
-        if dir == "" {
+        if dir.is_empty() {
             for i in self.fs.lock().keys() {
                 ret.push(File {
                     name: format!("{i}"),
@@ -30,14 +30,14 @@ impl super::filesystem::FileSystem for StdioFs {
             let proc_id: u32 = dir.parse().unwrap();
             if let Some(io) = self.fs.lock().get(&proc_id) {
                 ret.push(File {
-                    name: format!("stdin"),
+                    name: "stdin".to_string(),
                     path: format!("{proc_id}/stdin"),
                     r#type: "file".to_string(),
                     size: io.stdin.lock().len() as u64,
                     ptr: None,
                 });
                 ret.push(File {
-                    name: format!("stdout"),
+                    name: "stdout".to_string(),
                     path: format!("{proc_id}/stdout"),
                     r#type: "file".to_string(),
                     size: io.stdout.lock().len() as u64,
@@ -47,11 +47,11 @@ impl super::filesystem::FileSystem for StdioFs {
             }
         }
 
-        return Err(Error::DirDoesntExist);
+        Err(Error::DirDoesntExist)
     }
 
     fn open(&self, path: &str) -> Result<File, Error> {
-        let split: Vec<&str> = path.split("/").collect();
+        let split: Vec<&str> = path.split('/').collect();
         if split.len() != 2 {
             return Err(Error::FileDoesntExist);
         }
@@ -73,20 +73,20 @@ impl super::filesystem::FileSystem for StdioFs {
                     });
                 }
                 self.fs.lock().insert(id, Stdio::new());
-                return Ok(File {
+                Ok(File {
                     name: split[1].to_string(),
                     path: path.to_string(),
                     r#type: "file".to_string(),
                     size: 0, // fixme
                     ptr: None,
-                });
+                })
             }
-            Err(_) => return Err(Error::FileDoesntExist),
-        };
+            Err(_) => Err(Error::FileDoesntExist),
+        }
     }
 
     fn read(&self, file: &File, buf: &mut [u8]) -> Result<(), Error> {
-        let split: Vec<&str> = file.path.split("/").collect();
+        let split: Vec<&str> = file.path.split('/').collect();
         if split.len() != 2 {
             return Err(Error::FileDoesntExist);
         }
@@ -102,14 +102,14 @@ impl super::filesystem::FileSystem for StdioFs {
                         _ => return Err(Error::FileDoesntExist),
                     };
                 }
-                return Err(Error::FileDoesntExist);
+                Err(Error::FileDoesntExist)
             }
-            Err(_) => return Err(Error::FileDoesntExist),
-        };
+            Err(_) => Err(Error::FileDoesntExist),
+        }
     }
 
     fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error> {
-        let split: Vec<&str> = file.path.split("/").collect();
+        let split: Vec<&str> = file.path.split('/').collect();
         if split.len() != 2 {
             return Err(Error::FileDoesntExist);
         }
@@ -125,10 +125,16 @@ impl super::filesystem::FileSystem for StdioFs {
                         _ => return Err(Error::FileDoesntExist),
                     };
                 }
-                return Err(Error::FileDoesntExist);
+                Err(Error::FileDoesntExist)
             }
-            Err(_) => return Err(Error::FileDoesntExist),
-        };
+            Err(_) => Err(Error::FileDoesntExist),
+        }
+    }
+}
+
+impl Default for StdioFs {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -146,6 +152,12 @@ pub struct Stdio {
     stdin: Mutex<VecDeque<u8>>,
 }
 
+impl Default for Stdio {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Stdio {
     pub fn new() -> Self {
         // fix me - mutexes
@@ -157,25 +169,25 @@ impl Stdio {
 
     pub fn write_stdin(&self, buf: &[u8]) {
         for i in buf {
-            self.stdin.lock().push_back(i.clone());
+            self.stdin.lock().push_back(*i);
         }
     }
 
     pub fn write_stdout(&self, buf: &[u8]) {
         for i in buf {
-            self.stdout.lock().push_back(i.clone());
+            self.stdout.lock().push_back(*i);
         }
     }
 
     pub fn read_stdin(&self, buf: &mut [u8]) {
-        for i in 0..buf.len() {
-            buf[i] = self.stdin.lock().pop_front().unwrap_or(0);
+        for item in buf {
+            *item = self.stdin.lock().pop_front().unwrap_or(0);
         }
     }
 
     pub fn read_stdout(&self, buf: &mut [u8]) {
-        for i in 0..buf.len() {
-            buf[i] = self.stdout.lock().pop_front().unwrap_or(0);
+        for item in buf {
+            *item = self.stdout.lock().pop_front().unwrap_or(0);
         }
     }
 }

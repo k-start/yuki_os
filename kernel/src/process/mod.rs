@@ -26,7 +26,7 @@ impl Process {
         Process {
             state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
-            file_descriptors: file_descriptors,
+            file_descriptors,
         }
     }
 }

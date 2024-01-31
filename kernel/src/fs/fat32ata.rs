@@ -50,7 +50,7 @@ impl Read for Fat32Ata {
             buf[i] = buf_2[block_offset as usize + i];
         }
 
-        self.pos = self.pos + buf.len() as u64;
+        self.pos += buf.len() as u64;
 
         Ok(buf.len())
     }

@@ -6,16 +6,6 @@ extern crate user_api;
 
 #[no_mangle]
 fn main() {
-    // loop {
-    //     let mut x: [u8; 1] = [0; 1];
-    //     unsafe {
-    //         user_api::syscalls::read(0, &mut x);
-    //     };
-    //     if x != [0] {
-    //         print!("{}", x[0] as char);
-    //     }
-    // }
-
     let mut pid = unsafe { user_api::syscalls::get_pid() };
     println!("[{pid}] Forking...");
 
@@ -30,7 +20,7 @@ fn main() {
         println!("[{pid}] Parent");
     }
 
-    println!("[{pid}] This should print twice");
+    println!("[{pid}] This prints once now!");
 
     loop {}
 }

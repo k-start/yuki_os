@@ -69,13 +69,11 @@ impl ElfLoader for UserspaceElfLoader {
         println!("load region into = {:#x} -- {:#x}", start, end);
 
         let dest_ptr: *const u8 = VirtAddr::new(start).as_ptr();
-        let mut i = 0;
-        for value in region {
+        for (i, value) in region.iter().enumerate() {
             unsafe {
                 let ptr: *mut u8 = dest_ptr.add(i).cast_mut();
                 core::ptr::write(ptr, *value);
             }
-            i += 1;
         }
 
         Ok(())
