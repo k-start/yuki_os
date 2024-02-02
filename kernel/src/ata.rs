@@ -1,12 +1,9 @@
 use alloc::vec::Vec;
 use bit_field::BitField;
-use lazy_static::lazy_static;
 use spin::Mutex;
 use x86_64::instructions::port::{Port, PortReadOnly, PortWriteOnly};
 
-lazy_static! {
-    pub static ref BUSES: Mutex<Vec<Bus>> = Mutex::new(Vec::new());
-}
+pub static BUSES: Mutex<Vec<Bus>> = Mutex::new(Vec::new());
 
 #[allow(dead_code)]
 #[repr(u16)]

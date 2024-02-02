@@ -5,13 +5,9 @@ use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use lazy_static::lazy_static;
 use spin::Mutex;
 
-lazy_static! {
-    static ref FS: Mutex<BTreeMap<String, Box<dyn FileSystem + Send>>> =
-        Mutex::new(BTreeMap::new());
-}
+static FS: Mutex<BTreeMap<String, Box<dyn FileSystem + Send>>> = Mutex::new(BTreeMap::new());
 
 pub fn init() {}
 

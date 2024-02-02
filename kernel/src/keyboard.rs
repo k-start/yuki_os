@@ -1,18 +1,15 @@
-use lazy_static::lazy_static;
 use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 use spin::Mutex;
 
 use crate::scheduler;
 
-lazy_static! {
-    static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = {
-        Mutex::new(Keyboard::new(
-            ScancodeSet1::new(),
-            layouts::Us104Key,
-            HandleControl::Ignore,
-        ))
-    };
-}
+static KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = {
+    Mutex::new(Keyboard::new(
+        ScancodeSet1::new(),
+        layouts::Us104Key,
+        HandleControl::Ignore,
+    ))
+};
 
 pub fn handle_key(scancode: u8) {
     let mut keyboard = KEYBOARD.lock();
