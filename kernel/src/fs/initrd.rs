@@ -111,8 +111,7 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                     + file_count as usize * core::mem::size_of::<RdFile>()
                     + 1;
 
-                buffer[..(offset + rd_file.size - offset)]
-                    .copy_from_slice(&self.data[offset..(offset + rd_file.size)]);
+                buffer[..rd_file.size].copy_from_slice(&self.data[offset..(offset + rd_file.size)]);
             }
         }
         Ok(())
