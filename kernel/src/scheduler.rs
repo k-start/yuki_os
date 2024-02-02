@@ -6,13 +6,10 @@ use crate::{
 };
 use alloc::{string::String, vec::Vec};
 use elfloader::ElfBinary;
-use lazy_static::lazy_static;
-use spin::Mutex;
+use spin::{Mutex, RwLock};
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
-lazy_static! {
-    pub static ref SCHEDULER: Scheduler = Scheduler::new();
-}
+pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
 
 pub struct Scheduler {
     processes: Mutex<Vec<Process>>,
@@ -26,7 +23,7 @@ impl Default for Scheduler {
 }
 
 impl Scheduler {
-    pub fn new() -> Scheduler {
+    pub const fn new() -> Scheduler {
         Scheduler {
             processes: Mutex::new(Vec::new()),
             cur_process: Mutex::new(None), // so that next process is 0

@@ -95,14 +95,18 @@ extern "x86-interrupt" fn general_protection_fault_handler(
 }
 
 extern "C" fn timer_interrupt_handler(context_addr: *const Context) -> *const Context {
-    unsafe { scheduler::SCHEDULER.save_current_context(context_addr) };
+    unsafe {
+        scheduler::SCHEDULER
+            .read()
+            .save_current_context(context_addr)
+    };
 
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
 
-    let next = scheduler::SCHEDULER.run_next();
+    let next = scheduler::SCHEDULER.read().run_next();
     &next as *const Context
 }
 

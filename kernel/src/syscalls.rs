@@ -160,7 +160,9 @@ fn handle_syscall(regs: &mut Context) {
         READ => {
             let buf: &mut [u8] =
                 unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
-            scheduler::SCHEDULER.read_file_descriptor(regs.rdi as u32, buf);
+            scheduler::SCHEDULER
+                .read()
+                .read_file_descriptor(regs.rdi as u32, buf);
             regs.rax = 0;
         }
         WRITE => unsafe {
@@ -180,24 +182,24 @@ fn handle_syscall(regs: &mut Context) {
             // println!("open {filename}");
         }
         GET_PID => {
-            regs.rax = scheduler::SCHEDULER.get_cur_pid();
+            regs.rax = scheduler::SCHEDULER.read().get_cur_pid();
         }
         FORK => {
             println!(
                 "[Kernel] Forking PID: {}",
-                scheduler::SCHEDULER.get_cur_pid()
+                scheduler::SCHEDULER.read().get_cur_pid()
             );
-            regs.rax = scheduler::SCHEDULER.fork_current(regs.clone());
+            regs.rax = scheduler::SCHEDULER.read().fork_current(regs.clone());
         }
         EXEC => {
             let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
                 .to_str()
                 .unwrap()
                 .to_owned();
-            regs.rax = scheduler::SCHEDULER.exec(regs, filename);
+            regs.rax = scheduler::SCHEDULER.read().exec(regs, filename);
         }
         EXIT => {
-            scheduler::SCHEDULER.exit_current();
+            scheduler::SCHEDULER.read().exit_current();
         }
         _ => {}
     }
