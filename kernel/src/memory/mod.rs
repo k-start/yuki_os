@@ -64,7 +64,9 @@ pub unsafe fn init_page_table(physical_memory_offset: VirtAddr) -> OffsetPageTab
 /// complete physical memory is mapped to virtual memory at the passed
 /// `physical_memory_offset`. Also, this function must be only called once
 /// to avoid aliasing `&mut` references (which is undefined behavior).
-unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> (&'static mut PageTable, u64) {
+unsafe fn active_level_4_table(
+    physical_memory_offset: VirtAddr,
+) -> (&'static mut PageTable, PhysAddr) {
     use x86_64::registers::control::Cr3;
 
     let (level_4_table_frame, _) = Cr3::read();
@@ -73,10 +75,10 @@ unsafe fn active_level_4_table(physical_memory_offset: VirtAddr) -> (&'static mu
     let virt = physical_memory_offset + phys.as_u64();
     let page_table_ptr: *mut PageTable = virt.as_mut_ptr();
 
-    (&mut *page_table_ptr, phys.as_u64()) // unsafe
+    (&mut *page_table_ptr, phys) // unsafe
 }
 
-pub fn active_page_table() -> (&'static mut PageTable, u64) {
+pub fn active_page_table() -> (&'static mut PageTable, PhysAddr) {
     let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
 
     unsafe { active_level_4_table(memory_info.phys_mem_offset) }
@@ -121,7 +123,7 @@ pub fn translate_addr(addr: VirtAddr, physical_memory_offset: VirtAddr) -> Optio
     translate_addr_inner(addr, physical_memory_offset)
 }
 
-fn create_empty_pagetable() -> (*mut PageTable, u64) {
+fn create_empty_pagetable() -> (*mut PageTable, PhysAddr) {
     let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
 
     // Get a frame to store the level 4 table
@@ -135,10 +137,10 @@ fn create_empty_pagetable() -> (*mut PageTable, u64) {
         (*page_table_ptr).zero();
     }
 
-    (page_table_ptr, phys.as_u64())
+    (page_table_ptr, phys)
 }
 
-fn copy_pagetables(level_4_table: &PageTable) -> (*mut PageTable, u64) {
+fn copy_pagetables(level_4_table: &PageTable) -> (*mut PageTable, PhysAddr) {
     // Create a new level 4 pagetable
     let (table_ptr, table_physaddr) = create_empty_pagetable();
     let table = unsafe { &mut *table_ptr };
@@ -160,7 +162,7 @@ fn copy_pagetables(level_4_table: &PageTable) -> (*mut PageTable, u64) {
                     let to_table_m1 = unsafe { &mut *new_table_ptr };
 
                     // Point the entry to the new table
-                    to_table[i].set_addr(PhysAddr::new(new_table_physaddr), entry.flags());
+                    to_table[i].set_addr(new_table_physaddr, entry.flags());
 
                     // Get reference to the input level-1 table
                     let from_table_m1 = {
@@ -186,7 +188,7 @@ fn copy_pagetables(level_4_table: &PageTable) -> (*mut PageTable, u64) {
     (table_ptr, table_physaddr)
 }
 
-pub fn create_new_user_pagetable() -> (*mut PageTable, u64) {
+pub fn create_new_user_pagetable() -> (*mut PageTable, PhysAddr) {
     let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
     // Copy kernel pages
     let (user_page_table_ptr, user_page_table_physaddr) =
@@ -195,14 +197,15 @@ pub fn create_new_user_pagetable() -> (*mut PageTable, u64) {
     (user_page_table_ptr, user_page_table_physaddr)
 }
 
-pub fn copy_user_pagetable(pagetable: &PageTable) -> (*mut PageTable, u64) {
+pub fn copy_user_pagetable(pagetable: &PageTable) -> (*mut PageTable, PhysAddr) {
     // Copy pages
     let (user_page_table_ptr, user_page_table_physaddr) = copy_pagetables(pagetable);
 
     (user_page_table_ptr, user_page_table_physaddr)
 }
 
-pub fn switch_to_pagetable(physaddr: u64) {
+pub fn switch_to_pagetable(physaddr: PhysAddr) {
+    let physaddr = physaddr.as_u64();
     unsafe {
         asm!("mov cr3, {addr}",
              addr = in(reg) physaddr);
@@ -211,18 +214,11 @@ pub fn switch_to_pagetable(physaddr: u64) {
 
 pub fn switch_to_kernel_pagetable() {
     let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
-    let phys_addr = (memory_info.kernel_l4_table as *mut PageTable as u64)
-        - memory_info.phys_mem_offset.as_u64();
+    let phys_addr = PhysAddr::new(
+        (memory_info.kernel_l4_table as *mut PageTable as u64)
+            - memory_info.phys_mem_offset.as_u64(),
+    );
     switch_to_pagetable(phys_addr);
-}
-
-pub fn active_pagetable_physaddr() -> u64 {
-    let mut physaddr: u64;
-    unsafe {
-        asm!("mov {addr}, cr3",
-             addr = out(reg) physaddr);
-    }
-    physaddr
 }
 
 /// Allocates pages in the level_4_table supplied

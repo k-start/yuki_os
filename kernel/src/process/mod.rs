@@ -1,7 +1,7 @@
 use crate::fs::{self, filesystem::FileDescriptor};
 use alloc::{collections::BTreeMap, format};
 use core::fmt::Display;
-use x86_64::VirtAddr;
+use x86_64::{PhysAddr, VirtAddr};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProcessState {
@@ -12,13 +12,18 @@ pub enum ProcessState {
 }
 
 pub struct Process {
-    pub state: ProcessState,  // the current state of the process
-    pub page_table_phys: u64, // the page table for this process
+    pub state: ProcessState,       // the current state of the process
+    pub page_table_phys: PhysAddr, // the page table for this process
     pub file_descriptors: BTreeMap<u32, FileDescriptor>, // file descriptors for Stdio
 }
 
 impl Process {
-    pub fn new(exec_base: VirtAddr, stack_end: VirtAddr, page_table_phys: u64, id: u32) -> Process {
+    pub fn new(
+        exec_base: VirtAddr,
+        stack_end: VirtAddr,
+        page_table_phys: PhysAddr,
+        id: u32,
+    ) -> Process {
         let mut file_descriptors = BTreeMap::new();
         file_descriptors.insert(0, fs::vfs::open(&format!("/stdio/{id}/stdin")).unwrap());
         file_descriptors.insert(1, fs::vfs::open(&format!("/stdio/{id}/stdout")).unwrap());
@@ -35,8 +40,9 @@ impl Display for Process {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "PT: {}, Context: {:x?}",
-            self.page_table_phys, self.state
+            "PT: {}, Context: {:#x?}",
+            self.page_table_phys.as_u64(),
+            self.state
         )
     }
 }
