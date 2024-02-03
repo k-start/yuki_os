@@ -43,7 +43,12 @@ pub fn init(boot_info: &'static mut BootInfo) {
     let stdiofs = StdioFs::new();
     fs::vfs::mount("stdio", stdiofs);
 
-    println!("{:?}", fs::vfs::list_dir("/initrd"));
+    if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
+        let framebufferfs = fs::framebuffer::FrameBufferFs::new(framebuffer);
+        fs::vfs::mount("framebuffer", framebufferfs);
+    }
+
+    println!("{:?}", fs::vfs::list_dir("/framebuffer"));
 
     // let device = fs::fat32ata::Fat32Ata::new(0);
     // let fs = fs::fatfs::FatFs::new(device);
