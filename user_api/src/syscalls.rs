@@ -6,7 +6,7 @@ pub const FORK: usize = 57;
 pub const EXEC: usize = 59;
 pub const EXIT: usize = 60;
 
-pub unsafe fn read(fd: i32, buf: &mut [u8]) {
+pub unsafe fn read(fd: usize, buf: &mut [u8]) {
     core::arch::asm!(
         "syscall",
         in("rax") READ,
@@ -17,7 +17,7 @@ pub unsafe fn read(fd: i32, buf: &mut [u8]) {
     );
 }
 
-pub unsafe fn write(fd: i32, buf: &[u8]) -> isize {
+pub unsafe fn write(fd: usize, buf: &[u8]) -> isize {
     let r0;
     core::arch::asm!(
         "syscall",
@@ -32,15 +32,17 @@ pub unsafe fn write(fd: i32, buf: &[u8]) -> isize {
     r0
 }
 
-pub unsafe fn open(filename: &[u8]) {
+pub unsafe fn open(filename: &[u8]) -> usize {
+    let r0;
     core::arch::asm!(
         "syscall",
-        in("rax") OPEN,
+        inlateout("rax") OPEN => r0,
         in("rdi") filename.as_ptr(), // Filename pointer
         in("rsi") 0, // Flags
         in("rdx") 0, // mode
         options(nostack, preserves_flags)
     );
+    r0
 }
 
 pub unsafe fn get_pid() -> isize {

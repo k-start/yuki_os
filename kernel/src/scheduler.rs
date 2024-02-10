@@ -327,6 +327,15 @@ impl Scheduler {
         });
     }
 
+    pub fn add_file_descriptor(&self, fd: &FileDescriptor) -> usize {
+        self.cur_process.lock().map(|cur_process_idx| {
+            self.processes.lock()[cur_process_idx]
+                .file_descriptors
+                .insert(3, fd.clone());
+        });
+        3
+    }
+
     pub fn get_cur_pid(&self) -> usize {
         self.cur_process.lock().unwrap_or(0)
     }

@@ -168,16 +168,25 @@ fn handle_syscall(regs: &mut Context) {
         WRITE => unsafe {
             let slice: &[u8] =
                 core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx);
-
-            let string = core::str::from_utf8(slice).unwrap();
-            print!("{string}");
+            if regs.rdi == 1 {
+                let string = core::str::from_utf8(slice).unwrap();
+                print!("{string}");
+            } else {
+                scheduler::SCHEDULER
+                    .read()
+                    .write_file_descriptor(regs.rdi as u32, slice);
+            }
             regs.rax = 0;
         },
         OPEN => {
-            let _filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
+            let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
                 .to_str()
                 .unwrap()
                 .to_owned();
+
+            let fd = crate::fs::vfs::open(&filename).unwrap();
+
+            regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(&fd);
 
             // println!("open {filename}");
         }
