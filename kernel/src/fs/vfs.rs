@@ -54,6 +54,16 @@ pub fn write(file: &FileDescriptor, buf: &[u8]) -> Result<(), Error> {
     }
 }
 
+pub fn ioctl(file: &FileDescriptor, cmd: u32, args: usize) -> Result<(), Error> {
+    let fs = FS.lock();
+
+    if let Some(device) = fs.get(&file.device) {
+        device.ioctl(&file.file, cmd, args)
+    } else {
+        Err(Error::DeviceDoesntExist)
+    }
+}
+
 pub fn list_dir(path: &str) -> Result<Vec<FileDescriptor>, Error> {
     let fs = FS.lock();
     let mount_point = get_mount_point(path);

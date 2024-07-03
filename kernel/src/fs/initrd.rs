@@ -120,6 +120,10 @@ impl super::filesystem::FileSystem for InitRd<'_> {
     fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {
         panic!("Can't write to initrd")
     }
+
+    fn ioctl(&self, _file: &File, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        todo!()
+    }
 }
 
 impl InitRd<'_> {

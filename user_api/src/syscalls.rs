@@ -1,6 +1,7 @@
 pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
+pub const IOCTL: usize = 16;
 pub const GET_PID: usize = 39;
 pub const FORK: usize = 57;
 pub const EXEC: usize = 59;
@@ -43,6 +44,17 @@ pub unsafe fn open(filename: &[u8]) -> usize {
         options(nostack, preserves_flags)
     );
     r0
+}
+
+pub unsafe fn ioctl(fd: usize, cmd: u32, arg: usize) {
+    core::arch::asm!(
+        "syscall",
+        in("rax") IOCTL,
+        in("rdi") fd, // File descriptor
+        in("rsi") cmd, // Command
+        in("rdx") arg, // Argument
+        options(nostack, preserves_flags)
+    );
 }
 
 pub unsafe fn get_pid() -> isize {

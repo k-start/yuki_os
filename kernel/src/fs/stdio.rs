@@ -130,6 +130,10 @@ impl super::filesystem::FileSystem for StdioFs {
             Err(_) => Err(Error::FileDoesntExist),
         }
     }
+
+    fn ioctl(&self, _file: &File, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        todo!()
+    }
 }
 
 impl Default for StdioFs {

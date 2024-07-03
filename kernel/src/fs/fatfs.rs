@@ -88,6 +88,10 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
     fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {
         todo!()
     }
+
+    fn ioctl(&self, _file: &File, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        todo!()
+    }
 }
 
 impl<IO: Read + Write + Seek> FatFs<IO> {

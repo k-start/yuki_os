@@ -147,6 +147,7 @@ pub struct Registers {
 pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
+pub const IOCTL: usize = 16;
 pub const GET_PID: usize = 39;
 pub const FORK: usize = 57;
 pub const EXEC: usize = 59;
@@ -189,6 +190,14 @@ fn handle_syscall(regs: &mut Context) {
             regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(&fd);
 
             // println!("open {filename}");
+        }
+        IOCTL => {
+            scheduler::SCHEDULER.read().ioctl(
+                regs.rdi as usize,
+                regs.rsi as u32,
+                regs.rdx as usize,
+            );
+            // println!("{:?}", regs.rdx as u64);
         }
         GET_PID => {
             regs.rax = scheduler::SCHEDULER.read().get_cur_pid();

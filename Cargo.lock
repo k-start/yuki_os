@@ -706,8 +706,6 @@ dependencies = [
  "linked_list_allocator",
  "pc-keyboard",
  "pic8259",
- "serde",
- "serde_json",
  "spin 0.9.8",
  "uart_16550",
  "x86_64",

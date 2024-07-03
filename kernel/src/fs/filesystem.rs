@@ -15,6 +15,7 @@ pub trait FileSystem {
     fn open(&self, path: &str) -> Result<File, Error>;
     fn read(&self, file: &File, buf: &mut [u8]) -> Result<(), Error>;
     fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error>;
+    fn ioctl(&self, file: &File, cmd: u32, arg: usize) -> Result<(), Error>;
 }
 
 #[derive(Default, Debug, Clone)]

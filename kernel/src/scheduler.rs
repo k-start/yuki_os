@@ -351,6 +351,19 @@ impl Scheduler {
         3
     }
 
+    pub fn ioctl(&self, fd: usize, cmd: u32, args: usize) {
+        self.cur_process.read().map(|cur_process_idx| {
+            let _ = fs::vfs::ioctl(
+                self.processes.read()[cur_process_idx]
+                    .file_descriptors
+                    .get(&(fd as u32))
+                    .unwrap(),
+                cmd,
+                args,
+            );
+        });
+    }
+
     pub fn get_cur_pid(&self) -> usize {
         self.processes.read()[self.cur_process.read().unwrap_or(0)].process_id
     }

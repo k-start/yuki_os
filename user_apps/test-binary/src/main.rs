@@ -8,7 +8,7 @@ use serde::Deserialize;
 #[macro_use]
 extern crate user_api;
 
-#[derive(Debug, Clone, Copy, Deserialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Default)]
 pub struct FrameBufferInfo {
     /// The total size in bytes.
     pub byte_len: usize,
@@ -28,12 +28,13 @@ pub struct FrameBufferInfo {
     pub stride: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
 pub enum PixelFormat {
     /// One byte red, then one byte green, then one byte blue.
     ///
     /// Length might be larger than 3, check [`bytes_per_pixel`][FrameBufferInfo::bytes_per_pixel]
     /// for this.
+    #[default]
     Rgb,
     /// One byte blue, then one byte green, then one byte red.
     ///
@@ -59,17 +60,25 @@ pub enum PixelFormat {
 #[no_mangle]
 fn main() {
     unsafe {
-        let fd = user_api::syscalls::open(b"/framebuffer/0-info");
-        let mut buf: [u8; 101] = [0; 101];
-        user_api::syscalls::read(fd, &mut buf);
-        let string = core::str::from_utf8(&buf).unwrap();
-        let (info, _size): (FrameBufferInfo, usize) = serde_json_core::from_str(string).unwrap();
-        println!("{info:?}");
+        // let fd = user_api::syscalls::open(b"/framebuffer/0-info");
+        // let mut buf: [u8; 101] = [0; 101];
+        // user_api::syscalls::read(fd, &mut buf);
+        // let string = core::str::from_utf8(&buf).unwrap();
+        // let (info, _size): (FrameBufferInfo, usize) = serde_json_core::from_str(string).unwrap();
+        // println!("{info:?}");
+
+        // let fd = user_api::syscalls::open(b"/framebuffer/0");
+        // buf = [255; 101];
+        // user_api::syscalls::write(fd, &mut buf);
+        // println!("{buf:?}");
+
+        let fb_info: FrameBufferInfo = FrameBufferInfo::default();
 
         let fd = user_api::syscalls::open(b"/framebuffer/0");
-        buf = [255; 101];
-        user_api::syscalls::write(fd, &mut buf);
-        println!("{buf:?}");
+        let ptr: *const FrameBufferInfo = &fb_info as *const FrameBufferInfo;
+        user_api::syscalls::ioctl(fd, 0, ptr as usize);
+
+        println!("{:?}", fb_info);
     }
     loop {
         let mut x: [u8; 1] = [0; 1];

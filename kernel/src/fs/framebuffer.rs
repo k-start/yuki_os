@@ -1,13 +1,9 @@
 // Filesystem for storing the framebuffer for applications to draw to the screen
 use super::filesystem::{Error, File};
-use alloc::{
-    string::{String, ToString},
-    vec::Vec,
-};
+use alloc::{string::ToString, vec::Vec};
 use bootloader_api::info::FrameBuffer;
-use serde::Serialize;
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy)]
 pub struct FrameBufferInfo {
     /// The total size in bytes.
     pub byte_len: usize,
@@ -27,7 +23,7 @@ pub struct FrameBufferInfo {
     pub stride: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PixelFormat {
     /// One byte red, then one byte green, then one byte blue.
@@ -65,7 +61,7 @@ impl FrameBufferFs<'static> {
         FrameBufferFs { framebuffer }
     }
 
-    fn generate_info(&self) -> String {
+    fn generate_info(&self) -> FrameBufferInfo {
         let pixel_format = match self.framebuffer.info().pixel_format {
             bootloader_api::info::PixelFormat::Rgb => PixelFormat::Rgb,
             bootloader_api::info::PixelFormat::Bgr => PixelFormat::Bgr,
@@ -81,15 +77,14 @@ impl FrameBufferFs<'static> {
             },
             _ => todo!(),
         };
-        let info = FrameBufferInfo {
+        FrameBufferInfo {
             byte_len: self.framebuffer.info().byte_len,
             width: self.framebuffer.info().width,
             height: self.framebuffer.info().height,
             pixel_format,
             bytes_per_pixel: self.framebuffer.info().bytes_per_pixel,
             stride: self.framebuffer.info().stride,
-        };
-        serde_json::to_string(&info).unwrap()
+        }
     }
 }
 
@@ -103,26 +98,10 @@ impl super::filesystem::FileSystem for FrameBufferFs<'static> {
             size: self.framebuffer.info().byte_len as u64,
             ptr: None,
         });
-        vec.push(File {
-            name: "0-info".to_string(),
-            path: "0-info".to_string(),
-            r#type: "file".to_string(),
-            size: self.generate_info().len() as u64,
-            ptr: None,
-        });
         Ok(vec)
     }
 
     fn open(&self, path: &str) -> Result<File, Error> {
-        if path.contains("info") {
-            return Ok(File {
-                name: "0-info".to_string(),
-                path: path.to_string(),
-                r#type: "file".to_string(),
-                size: self.generate_info().len() as u64,
-                ptr: None,
-            });
-        }
         Ok(File {
             name: "0".to_string(),
             path: path.to_string(),
@@ -132,29 +111,30 @@ impl super::filesystem::FileSystem for FrameBufferFs<'static> {
         })
     }
 
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<(), Error> {
-        if file.name.contains("info") {
-            let info_str = self.generate_info();
-            let info = info_str.as_bytes();
-            buf.copy_from_slice(&info);
-        } else {
-            let fb = self.framebuffer.buffer();
-            buf.copy_from_slice(&fb[..buf.len()]);
-        }
+    fn read(&self, _file: &File, buf: &mut [u8]) -> Result<(), Error> {
+        let fb = self.framebuffer.buffer();
+        buf.copy_from_slice(&fb[..buf.len()]);
+
         Ok(())
     }
 
-    fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error> {
-        if !file.name.contains("info") {
-            let pointer = self.framebuffer.buffer().as_ptr();
-            let fb = unsafe {
-                core::slice::from_raw_parts_mut(
-                    pointer as *mut u8,
-                    self.framebuffer.info().byte_len,
-                )
-            };
-            fb[..buf.len()].copy_from_slice(buf);
+    fn write(&self, _file: &File, buf: &[u8]) -> Result<(), Error> {
+        let pointer = self.framebuffer.buffer().as_ptr();
+        let fb = unsafe {
+            core::slice::from_raw_parts_mut(pointer as *mut u8, self.framebuffer.info().byte_len)
+        };
+        fb[..buf.len()].copy_from_slice(buf);
+
+        Ok(())
+    }
+
+    fn ioctl(&self, _file: &File, _cmd: u32, arg: usize) -> Result<(), Error> {
+        let ptr: *mut FrameBufferInfo = arg as *mut FrameBufferInfo;
+
+        unsafe {
+            (*ptr) = self.generate_info();
         }
+
         Ok(())
     }
 }
