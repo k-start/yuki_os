@@ -6,15 +6,15 @@ use crate::{
 };
 use alloc::{string::String, vec::Vec};
 use elfloader::ElfBinary;
-use spin::{Mutex, RwLock};
+use spin::RwLock;
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
 
 pub struct Scheduler {
-    processes: Mutex<Vec<Process>>,
-    cur_process: Mutex<Option<usize>>,
-    allocated_ids: Mutex<Vec<usize>>,
+    processes: RwLock<Vec<Process>>,
+    cur_process: RwLock<Option<usize>>,
+    allocated_ids: RwLock<Vec<usize>>,
 }
 
 impl Default for Scheduler {
@@ -26,9 +26,9 @@ impl Default for Scheduler {
 impl Scheduler {
     pub const fn new() -> Scheduler {
         Scheduler {
-            processes: Mutex::new(Vec::new()),
-            cur_process: Mutex::new(None), // so that next process is 0
-            allocated_ids: Mutex::new(Vec::new()),
+            processes: RwLock::new(Vec::new()),
+            cur_process: RwLock::new(None), // so that next process is 0
+            allocated_ids: RwLock::new(Vec::new()),
         }
     }
 
@@ -101,8 +101,8 @@ impl Scheduler {
             0,
         );
 
-        self.allocated_ids.lock().push(process.process_id);
-        self.processes.lock().push(process);
+        self.allocated_ids.write().push(process.process_id);
+        self.processes.write().push(process);
     }
 
     /// Initialize a new OffsetPageTable.
@@ -113,24 +113,24 @@ impl Scheduler {
     /// This should only be called by the interrupt that is switching
     /// contexts.
     pub unsafe fn save_current_context(&self, context: *const Context) {
-        self.cur_process.lock().map(|cur_process_idx| {
-            if self.processes.lock()[cur_process_idx].state == ProcessState::Exiting() {
-                let pid = self.processes.lock()[cur_process_idx].process_id;
-                self.allocated_ids.lock().remove(pid);
-                self.processes.lock().remove(cur_process_idx);
+        self.cur_process.read().map(|cur_process_idx| {
+            if self.processes.read()[cur_process_idx].state == ProcessState::Exiting() {
+                let pid = self.processes.read()[cur_process_idx].process_id;
+                self.allocated_ids.write().remove(pid);
+                self.processes.write().remove(cur_process_idx);
                 println!("Exited process #{}", pid);
             } else {
                 let ctx = (*context).clone();
-                self.processes.lock()[cur_process_idx].state = ProcessState::SavedContext(ctx);
+                self.processes.write()[cur_process_idx].state = ProcessState::SavedContext(ctx);
             }
         });
     }
 
     pub fn run_next(&self) -> Context {
-        let processes_len = self.processes.lock().len(); // how many processes are available
+        let processes_len = self.processes.read().len(); // how many processes are available
         if processes_len > 0 {
             let process_state = {
-                let mut cur_process_opt = self.cur_process.lock(); // lock the current process index
+                let mut cur_process_opt = self.cur_process.write(); // lock the current process index
 
                 let next_process = if cur_process_opt.is_none() {
                     // properly start at process 0
@@ -142,7 +142,7 @@ impl Scheduler {
 
                 let cur_process = cur_process_opt.get_or_insert(processes_len);
                 *cur_process = next_process;
-                let process = &self.processes.lock()[next_process]; // get the next process
+                let process = &self.processes.read()[next_process]; // get the next process
 
                 // println!("Switching to process #{} ({})", cur_process, process);
 
@@ -169,12 +169,12 @@ impl Scheduler {
 
     pub fn exit_current(&self) {
         // FIX ME - janky exiting due to TSS not set up for syscall
-        self.cur_process.lock().map(|cur_process_idx| {
+        self.cur_process.read().map(|cur_process_idx| {
             println!(
                 "Exiting process #{}",
-                self.processes.lock()[cur_process_idx].process_id
+                self.processes.read()[cur_process_idx].process_id
             );
-            self.processes.lock()[cur_process_idx].state = ProcessState::Exiting();
+            self.processes.write()[cur_process_idx].state = ProcessState::Exiting();
         });
 
         // let next_process = (*cur_process + 1) % processes_len;
@@ -213,8 +213,8 @@ impl Scheduler {
 
         let mut pid = 0;
 
-        let child_process = self.cur_process.lock().map(|cur_process_idx| {
-            let cur_process = &self.processes.lock()[cur_process_idx];
+        let child_process = self.cur_process.read().map(|cur_process_idx| {
+            let cur_process = &self.processes.read()[cur_process_idx];
             let (code_selector, data_selector) = crate::gdt::get_usermode_segments();
             let mut ctx = context.clone();
 
@@ -224,7 +224,7 @@ impl Scheduler {
             ctx.ss = data_selector.0 as usize;
             pid = self.get_available_pid();
 
-            self.allocated_ids.lock().push(pid);
+            self.allocated_ids.write().push(pid);
 
             Process {
                 process_id: pid,
@@ -234,7 +234,7 @@ impl Scheduler {
             }
         });
 
-        self.processes.lock().push(child_process.unwrap());
+        self.processes.write().push(child_process.unwrap());
 
         pid
     }
@@ -305,23 +305,23 @@ impl Scheduler {
         context.cs = code_selector.0 as usize;
         context.ss = data_selector.0 as usize;
 
-        self.cur_process.lock().map(|cur_process_idx| {
-            self.processes.lock()[cur_process_idx].page_table_phys = user_page_table_physaddr;
+        self.cur_process.read().map(|cur_process_idx| {
+            self.processes.write()[cur_process_idx].page_table_phys = user_page_table_physaddr;
         });
         0
     }
 
     pub fn push_stdin(&self, key: u8) {
-        let processes = self.processes.lock();
+        let processes = self.processes.read();
         // for i in 0..processes.len() {
         let _ = fs::vfs::write(processes[0].file_descriptors.get(&0).unwrap(), &[key]);
         // }
     }
 
     pub fn write_file_descriptor(&self, id: u32, buf: &[u8]) {
-        self.cur_process.lock().map(|cur_process_idx| {
+        self.cur_process.read().map(|cur_process_idx| {
             let _ = fs::vfs::write(
-                self.processes.lock()[cur_process_idx]
+                self.processes.read()[cur_process_idx]
                     .file_descriptors
                     .get(&id)
                     .unwrap(),
@@ -331,9 +331,9 @@ impl Scheduler {
     }
 
     pub fn read_file_descriptor(&self, id: u32, buf: &mut [u8]) {
-        self.cur_process.lock().map(|cur_process_idx| {
+        self.cur_process.read().map(|cur_process_idx| {
             let _ = fs::vfs::read(
-                self.processes.lock()[cur_process_idx]
+                self.processes.read()[cur_process_idx]
                     .file_descriptors
                     .get(&id)
                     .unwrap(),
@@ -343,8 +343,8 @@ impl Scheduler {
     }
 
     pub fn add_file_descriptor(&self, fd: &FileDescriptor) -> usize {
-        self.cur_process.lock().map(|cur_process_idx| {
-            self.processes.lock()[cur_process_idx]
+        self.cur_process.read().map(|cur_process_idx| {
+            self.processes.write()[cur_process_idx]
                 .file_descriptors
                 .insert(3, fd.clone());
         });
@@ -352,13 +352,13 @@ impl Scheduler {
     }
 
     pub fn get_cur_pid(&self) -> usize {
-        self.processes.lock()[self.cur_process.lock().unwrap_or(0)].process_id
+        self.processes.read()[self.cur_process.read().unwrap_or(0)].process_id
     }
 
     pub fn get_available_pid(&self) -> usize {
         for i in 1..1000 {
             // FIX ME - terrible search for PID
-            if !self.allocated_ids.lock().contains(&i) {
+            if !self.allocated_ids.read().contains(&i) {
                 return i;
             }
         }
