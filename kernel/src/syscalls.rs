@@ -192,12 +192,14 @@ fn handle_syscall(regs: &mut Context) {
             // println!("open {filename}");
         }
         IOCTL => {
+            // FIX ME - expand to actually check arguments rather than just assume we are getting
+            // framebuffer info
             scheduler::SCHEDULER.read().ioctl(
                 regs.rdi as usize,
                 regs.rsi as u32,
                 regs.rdx as usize,
             );
-            // println!("{:?}", regs.rdx as u64);
+            // look at return values
         }
         GET_PID => {
             regs.rax = scheduler::SCHEDULER.read().get_cur_pid();
