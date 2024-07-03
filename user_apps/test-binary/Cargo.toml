@@ -7,6 +7,3 @@ edition = "2021"
 
 [dependencies]
 user_api = { path = "../../user_api" }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-serde-json-core = "0.5.1"
-# heapless = "0.8.0"

@@ -3,12 +3,10 @@
 
 use core::alloc::GlobalAlloc;
 
-use serde::Deserialize;
-
 #[macro_use]
 extern crate user_api;
 
-#[derive(Debug, Clone, Copy, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct FrameBufferInfo {
     /// The total size in bytes.
     pub byte_len: usize,
@@ -28,7 +26,7 @@ pub struct FrameBufferInfo {
     pub stride: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PixelFormat {
     /// One byte red, then one byte green, then one byte blue.
     ///
