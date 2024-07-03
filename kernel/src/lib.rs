@@ -61,7 +61,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
     // sched.schedule(file);
     sched.schedule(file2);
 
-    println!("{:?}", fs::vfs::list_dir("/stdio/0"));
+    println!("{:?}", fs::vfs::list_dir("/stdio/1"));
 
     x86_64::instructions::interrupts::enable();
 }

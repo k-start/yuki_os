@@ -14,6 +14,7 @@ pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
 pub struct Scheduler {
     processes: Mutex<Vec<Process>>,
     cur_process: Mutex<Option<usize>>,
+    allocated_ids: Mutex<Vec<usize>>,
 }
 
 impl Default for Scheduler {
@@ -27,6 +28,7 @@ impl Scheduler {
         Scheduler {
             processes: Mutex::new(Vec::new()),
             cur_process: Mutex::new(None), // so that next process is 0
+            allocated_ids: Mutex::new(Vec::new()),
         }
     }
 
@@ -96,9 +98,10 @@ impl Scheduler {
             VirtAddr::new(entry_point),
             VirtAddr::new(0x801000),
             user_page_table_physaddr,
-            self.processes.lock().len() as u32,
+            0,
         );
 
+        self.allocated_ids.lock().push(process.process_id);
         self.processes.lock().push(process);
     }
 
@@ -112,8 +115,10 @@ impl Scheduler {
     pub unsafe fn save_current_context(&self, context: *const Context) {
         self.cur_process.lock().map(|cur_process_idx| {
             if self.processes.lock()[cur_process_idx].state == ProcessState::Exiting() {
+                let pid = self.processes.lock()[cur_process_idx].process_id;
+                self.allocated_ids.lock().remove(pid);
                 self.processes.lock().remove(cur_process_idx);
-                println!("Exited process #{}", cur_process_idx);
+                println!("Exited process #{}", pid);
             } else {
                 let ctx = (*context).clone();
                 self.processes.lock()[cur_process_idx].state = ProcessState::SavedContext(ctx);
@@ -165,7 +170,10 @@ impl Scheduler {
     pub fn exit_current(&self) {
         // FIX ME - janky exiting due to TSS not set up for syscall
         self.cur_process.lock().map(|cur_process_idx| {
-            println!("Exiting process #{}", cur_process_idx);
+            println!(
+                "Exiting process #{}",
+                self.processes.lock()[cur_process_idx].process_id
+            );
             self.processes.lock()[cur_process_idx].state = ProcessState::Exiting();
         });
 
@@ -203,6 +211,8 @@ impl Scheduler {
             new_stack.copy_from_slice(&old_stack[..0x1000]);
         }
 
+        let mut pid = 0;
+
         let child_process = self.cur_process.lock().map(|cur_process_idx| {
             let cur_process = &self.processes.lock()[cur_process_idx];
             let (code_selector, data_selector) = crate::gdt::get_usermode_segments();
@@ -212,7 +222,12 @@ impl Scheduler {
             ctx.rsp += 0x1000;
             ctx.cs = code_selector.0 as usize;
             ctx.ss = data_selector.0 as usize;
+            pid = self.get_available_pid();
+
+            self.allocated_ids.lock().push(pid);
+
             Process {
+                process_id: pid,
                 state: ProcessState::SavedContext(ctx),
                 page_table_phys: current_page_table_physaddr, // Use same address space
                 file_descriptors: cur_process.file_descriptors.clone(),
@@ -221,7 +236,7 @@ impl Scheduler {
 
         self.processes.lock().push(child_process.unwrap());
 
-        self.processes.lock().len()
+        pid
     }
 
     // exec sys_call function. Differs from `schedule` as it executes on the currently running process
@@ -337,7 +352,17 @@ impl Scheduler {
     }
 
     pub fn get_cur_pid(&self) -> usize {
-        self.cur_process.lock().unwrap_or(0)
+        self.processes.lock()[self.cur_process.lock().unwrap_or(0)].process_id
+    }
+
+    pub fn get_available_pid(&self) -> usize {
+        for i in 1..1000 {
+            // FIX ME - terrible search for PID
+            if !self.allocated_ids.lock().contains(&i) {
+                return i;
+            }
+        }
+        return 0;
     }
 }
 

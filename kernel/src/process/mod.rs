@@ -1,4 +1,7 @@
-use crate::fs::{self, filesystem::FileDescriptor};
+use crate::{
+    fs::{self, filesystem::FileDescriptor},
+    scheduler,
+};
 use alloc::{collections::BTreeMap, format};
 use core::fmt::Display;
 use x86_64::{PhysAddr, VirtAddr};
@@ -12,6 +15,7 @@ pub enum ProcessState {
 }
 
 pub struct Process {
+    pub process_id: usize,
     pub state: ProcessState,       // the current state of the process
     pub page_table_phys: PhysAddr, // the page table for this process
     pub file_descriptors: BTreeMap<u32, FileDescriptor>, // file descriptors for Stdio
@@ -22,13 +26,20 @@ impl Process {
         exec_base: VirtAddr,
         stack_end: VirtAddr,
         page_table_phys: PhysAddr,
-        id: u32,
+        parent_id: usize,
     ) -> Process {
+        let id = if parent_id == 0 {
+            scheduler::SCHEDULER.read().get_available_pid()
+        } else {
+            parent_id
+        };
+
         let mut file_descriptors = BTreeMap::new();
         file_descriptors.insert(0, fs::vfs::open(&format!("/stdio/{id}/stdin")).unwrap());
         file_descriptors.insert(1, fs::vfs::open(&format!("/stdio/{id}/stdout")).unwrap());
 
         Process {
+            process_id: id,
             state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
             file_descriptors,
