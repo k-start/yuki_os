@@ -155,14 +155,20 @@ fn copy_pagetables(level_4_table: &PageTable) -> (*mut PageTable, PhysAddr) {
             if !entry.is_unused() {
                 if (level == 1) || entry.flags().contains(PageTableFlags::HUGE_PAGE) {
                     // Maps a frame, not a page table
-                    to_table[i].set_addr(entry.addr(), entry.flags());
+                    to_table[i].set_addr(
+                        entry.addr(),
+                        entry.flags() | PageTableFlags::USER_ACCESSIBLE,
+                    ); // FIX ME - USER ACCESSIBLE remove when proper mmap
                 } else {
                     // Create a new table at level - 1
                     let (new_table_ptr, new_table_physaddr) = create_empty_pagetable();
                     let to_table_m1 = unsafe { &mut *new_table_ptr };
 
                     // Point the entry to the new table
-                    to_table[i].set_addr(new_table_physaddr, entry.flags());
+                    to_table[i].set_addr(
+                        new_table_physaddr,
+                        entry.flags() | PageTableFlags::USER_ACCESSIBLE,
+                    ); // FIX ME - USER ACCESSIBLE remove when proper mmap
 
                     // Get reference to the input level-1 table
                     let from_table_m1 = {

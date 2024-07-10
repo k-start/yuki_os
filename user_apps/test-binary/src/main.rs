@@ -58,18 +58,6 @@ pub enum PixelFormat {
 #[no_mangle]
 fn main() {
     unsafe {
-        // let fd = user_api::syscalls::open(b"/framebuffer/0-info");
-        // let mut buf: [u8; 101] = [0; 101];
-        // user_api::syscalls::read(fd, &mut buf);
-        // let string = core::str::from_utf8(&buf).unwrap();
-        // let (info, _size): (FrameBufferInfo, usize) = serde_json_core::from_str(string).unwrap();
-        // println!("{info:?}");
-
-        // let fd = user_api::syscalls::open(b"/framebuffer/0");
-        // buf = [255; 101];
-        // user_api::syscalls::write(fd, &mut buf);
-        // println!("{buf:?}");
-
         let fb_info: FrameBufferInfo = FrameBufferInfo::default();
 
         let fd = user_api::syscalls::open(b"/framebuffer/0");
@@ -77,6 +65,22 @@ fn main() {
         user_api::syscalls::ioctl(fd, 0, ptr as usize);
 
         println!("{:?}", fb_info);
+
+        let framebuffer = user_api::syscalls::mmap(0, fb_info.byte_len, fd) as *mut u8;
+
+        unsafe {
+            for r in 0..255 {
+                for i in (0..fb_info.byte_len).step_by(3) {
+                    (*framebuffer.wrapping_add(i)) = 0;
+                    (*framebuffer.wrapping_add(i + 1)) = 0;
+                    (*framebuffer.wrapping_add(i + 2)) = r;
+                }
+            }
+        }
+
+        // let mut buf = [255; 512];
+        // user_api::syscalls::write(fd, &mut buf);
+        // println!("{buf:?}");
     }
     loop {
         let mut x: [u8; 1] = [0; 1];
@@ -86,22 +90,5 @@ fn main() {
         if x != [0] {
             print!("{}", x[0] as char);
         }
-    }
-}
-
-// For some reason we have to compile with an allocator for serde, even with no_std
-// It never actually allocs
-#[global_allocator]
-static ALLOCATOR: TestAllocator = TestAllocator {};
-
-struct TestAllocator {}
-
-unsafe impl GlobalAlloc for TestAllocator {
-    unsafe fn alloc(&self, _layout: core::alloc::Layout) -> *mut u8 {
-        todo!()
-    }
-
-    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {
-        todo!()
     }
 }

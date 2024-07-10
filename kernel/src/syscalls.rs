@@ -147,6 +147,7 @@ pub struct Registers {
 pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
+pub const MMAP: usize = 9;
 pub const IOCTL: usize = 16;
 pub const GET_PID: usize = 39;
 pub const FORK: usize = 57;
@@ -190,6 +191,14 @@ fn handle_syscall(regs: &mut Context) {
             regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(&fd);
 
             // println!("open {filename}");
+        }
+        MMAP => {
+            let _fd = regs.r8;
+
+            // let pt = crate::memory::active_page_table().0;
+            // pt[0].set_addr(addr, flags)
+
+            regs.rax = 0x18000000000;
         }
         IOCTL => {
             // FIX ME - expand to actually check arguments rather than just assume we are getting
