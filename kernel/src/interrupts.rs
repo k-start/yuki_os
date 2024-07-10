@@ -1,4 +1,4 @@
-use crate::{gdt, keyboard, process::Context, scheduler};
+use crate::{gdt, inb, keyboard, outb, process::Context, scheduler};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spin;
@@ -15,6 +15,7 @@ pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 pub enum InterruptIndex {
     Timer = PIC_1_OFFSET,
     Keyboard,
+    Mouse = PIC_1_OFFSET + 12,
 }
 
 impl InterruptIndex {
@@ -50,6 +51,7 @@ lazy_static! {
                 .set_stack_index(gdt::TIMER_INTERRUPT_INDEX);
         }
         idt[InterruptIndex::Keyboard.as_usize()].set_handler_fn(keyboard_interrupt_handler);
+        idt[InterruptIndex::Mouse.as_usize()].set_handler_fn(mouse_interrupt_handler);
         idt
     };
 }
@@ -57,6 +59,22 @@ lazy_static! {
 pub fn init() {
     IDT.load();
     unsafe { PICS.lock().initialize() };
+
+    // Initialize mouse
+    // Address the 2nd device
+    outb(0x64, 0xd4);
+    // Write it
+    outb(0x60, 0xF4);
+    // Read back
+    while inb(0x60) != 0xFA {} /* Wait for ACK from mouse... */
+    outb(0x64, 0x20); /* Write 0x20 to port 0x64 */
+    let mut config = inb(0x60); /* Read byte from port 0x60 */
+    config = config | 1 << 1; /* Set bit 1*/
+    outb(0x64, 0x60); /* Write 0x60 to port 0x64 */
+    outb(0x60, config); /* Write config byte to port 0x60 */
+
+    println!("test");
+
     // x86_64::instructions::interrupts::enable();
 }
 
@@ -119,6 +137,19 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
+    }
+}
+
+extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    let mut port = Port::new(0x60);
+    let packet: u8 = unsafe { port.read() };
+    // MOUSE.lock().process_packet(packet);
+
+    println!("[Kernel] {:?}", packet);
+
+    unsafe {
+        PICS.lock()
+            .notify_end_of_interrupt(InterruptIndex::Mouse.as_u8());
     }
 }
 
