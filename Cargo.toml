@@ -14,6 +14,7 @@ ovmf-prebuilt = "0.1.0-alpha"
 
 [build-dependencies]
 kernel = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
+window-manager = { path = "user_apps/window-manager", artifact = "bin", target = "x86_64-unknown-none" }
 test-binary = { path = "user_apps/test-binary", artifact = "bin", target = "x86_64-unknown-none" }
 hello-world = { path = "user_apps/hello-world", artifact = "bin", target = "x86_64-unknown-none" }
 bootloader = "0.11.7"

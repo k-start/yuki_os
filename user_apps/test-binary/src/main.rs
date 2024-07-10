@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::alloc::GlobalAlloc;
-
 #[macro_use]
 extern crate user_api;
 
@@ -57,31 +55,31 @@ pub enum PixelFormat {
 
 #[no_mangle]
 fn main() {
-    unsafe {
-        let fb_info: FrameBufferInfo = FrameBufferInfo::default();
+    // unsafe {
+    // let fb_info: FrameBufferInfo = FrameBufferInfo::default();
 
-        let fd = user_api::syscalls::open(b"/framebuffer/0");
-        let ptr: *const FrameBufferInfo = &fb_info as *const FrameBufferInfo;
-        user_api::syscalls::ioctl(fd, 0, ptr as usize);
+    // let fd = user_api::syscalls::open(b"/framebuffer/0");
+    // let ptr: *const FrameBufferInfo = &fb_info as *const FrameBufferInfo;
+    // user_api::syscalls::ioctl(fd, 0, ptr as usize);
 
-        println!("{:?}", fb_info);
+    // println!("{:?}", fb_info);
 
-        let framebuffer = user_api::syscalls::mmap(0, fb_info.byte_len, fd) as *mut u8;
+    // let framebuffer = user_api::syscalls::mmap(0, fb_info.byte_len, fd) as *mut u8;
 
-        unsafe {
-            for r in 0..255 {
-                for i in (0..fb_info.byte_len).step_by(3) {
-                    (*framebuffer.wrapping_add(i)) = 0;
-                    (*framebuffer.wrapping_add(i + 1)) = 0;
-                    (*framebuffer.wrapping_add(i + 2)) = r;
-                }
-            }
-        }
+    // unsafe {
+    //     for r in 0..255 {
+    //         for i in (0..fb_info.byte_len).step_by(3) {
+    //             (*framebuffer.wrapping_add(i)) = 0;
+    //             (*framebuffer.wrapping_add(i + 1)) = 0;
+    //             (*framebuffer.wrapping_add(i + 2)) = r;
+    //         }
+    //     }
+    // }
 
-        // let mut buf = [255; 512];
-        // user_api::syscalls::write(fd, &mut buf);
-        // println!("{buf:?}");
-    }
+    // let mut buf = [255; 512];
+    // user_api::syscalls::write(fd, &mut buf);
+    // println!("{buf:?}");
+    // }
     loop {
         let mut x: [u8; 1] = [0; 1];
         unsafe {

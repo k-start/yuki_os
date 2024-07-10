@@ -55,7 +55,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
 
     // fs::vfs::mount(fs);
     // let file = fs::vfs::open("a:/test-binary").unwrap();
-    let file2 = fs::vfs::open("/initrd/hello-world").unwrap();
+    let file2 = fs::vfs::open("/initrd/window-manager").unwrap();
 
     let sched = &scheduler::SCHEDULER.read();
     // sched.schedule(file);
