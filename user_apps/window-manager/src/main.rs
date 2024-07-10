@@ -31,6 +31,9 @@ fn main() {
         .stroke_width(3)
         .stroke_alignment(StrokeAlignment::Inside)
         .build();
+    let background_style = PrimitiveStyleBuilder::new()
+        .fill_color(Rgb888::BLACK)
+        .build();
     let character_style = MonoTextStyle::new(&FONT_10X20, Rgb888::WHITE);
 
     display
@@ -51,13 +54,25 @@ fn main() {
 
         if x != [0] {
             if x == ['\n' as u8] {
-                y = y + 22;
+                y = y + 1;
                 i = 0;
                 continue;
             }
+            if x == ['\x08' as u8] {
+                i = i - 1;
+                Rectangle::new(
+                    Point::new(5, 15) + Point::new(12 * i, 22 * y),
+                    Size::new(10, 20),
+                )
+                .into_styled(background_style)
+                .draw(&mut display)
+                .unwrap();
+                continue;
+            }
+
             Text::with_alignment(
                 (x[0] as char).encode_utf8(&mut str),
-                display.bounding_box().center() + Point::new(12 * i, y),
+                Point::new(10, 30) + Point::new(12 * i, 22 * y),
                 character_style,
                 Alignment::Center,
             )
