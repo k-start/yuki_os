@@ -1,7 +1,8 @@
 use crate::{gdt, inb, keyboard, outb, process::Context, scheduler};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
-use spin;
+use ps2_mouse::{Mouse, MouseState};
+use spin::{self, Mutex};
 use x86_64::{
     instructions::port::Port,
     structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
@@ -73,8 +74,6 @@ pub fn init() {
     outb(0x64, 0x60); /* Write 0x60 to port 0x64 */
     outb(0x60, config); /* Write config byte to port 0x60 */
 
-    println!("test");
-
     // x86_64::instructions::interrupts::enable();
 }
 
@@ -128,6 +127,19 @@ extern "C" fn timer_interrupt_handler(context_addr: *const Context) -> *const Co
     &next as *const Context
 }
 
+pub static MOUSE: Mutex<Mouse> = Mutex::new(Mouse::new());
+
+// Initialize the mouse and set the on complete event.
+pub fn init_mouse() {
+    MOUSE.lock().init().unwrap();
+    MOUSE.lock().set_on_complete(on_complete);
+}
+
+// This will be fired when a packet is finished being processed.
+fn on_complete(mouse_state: MouseState) {
+    println!("{:?}", mouse_state);
+}
+
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let mut port = Port::new(0x60);
 
@@ -143,9 +155,9 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
 extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFrame) {
     let mut port = Port::new(0x60);
     let packet: u8 = unsafe { port.read() };
-    // MOUSE.lock().process_packet(packet);
+    MOUSE.lock().process_packet(packet);
 
-    println!("[Kernel] {:?}", packet);
+    // println!("[Kernel] {:?}", packet);
 
     unsafe {
         PICS.lock()
