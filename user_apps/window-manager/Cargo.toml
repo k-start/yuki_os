@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 user_api = { path = "../../user_api" }
+embedded-graphics = "0.8.1"

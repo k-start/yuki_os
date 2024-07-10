@@ -1,5 +1,11 @@
 #![allow(dead_code)]
 use core::slice;
+use embedded_graphics::{
+    draw_target::DrawTarget,
+    geometry::{OriginDimensions, Size},
+    pixelcolor::{Rgb888, RgbColor},
+    Pixel,
+};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FrameBufferInfo {
@@ -50,6 +56,19 @@ pub enum PixelFormat {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+    pub x: usize,
+    pub y: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Color {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+}
+
 pub struct FrameBuffer {
     info: FrameBufferInfo,
     addr: usize,
@@ -70,6 +89,12 @@ impl FrameBuffer {
         Self {
             info,
             addr: framebuffer,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        for i in self.buffer_mut() {
+            *i = 0;
         }
     }
 
@@ -94,17 +119,64 @@ impl FrameBuffer {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Position {
-    pub x: usize,
-    pub y: usize,
+pub struct Display<'f> {
+    framebuffer: &'f mut FrameBuffer,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Color {
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
+impl<'f> Display<'f> {
+    pub fn new(framebuffer: &'f mut FrameBuffer) -> Display {
+        Display { framebuffer }
+    }
+
+    fn draw_pixel(&mut self, Pixel(coordinates, color): Pixel<Rgb888>) {
+        // ignore any out of bounds pixels
+        let (width, height) = {
+            let info = self.framebuffer.info();
+
+            (info.width, info.height)
+        };
+
+        let (x, y) = {
+            let c: (i32, i32) = coordinates.into();
+            (c.0 as usize, c.1 as usize)
+        };
+
+        if (0..width).contains(&x) && (0..height).contains(&y) {
+            let color = Color {
+                red: color.r(),
+                green: color.g(),
+                blue: color.b(),
+            };
+
+            set_pixel_in(self.framebuffer, Position { x, y }, color);
+        }
+    }
+}
+
+impl<'f> DrawTarget for Display<'f> {
+    type Color = Rgb888;
+
+    /// Drawing operations can never fail.
+    type Error = core::convert::Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        for pixel in pixels.into_iter() {
+            self.draw_pixel(pixel);
+        }
+
+        Ok(())
+    }
+}
+
+impl<'f> OriginDimensions for Display<'f> {
+    fn size(&self) -> Size {
+        let info = self.framebuffer.info();
+
+        Size::new(info.width as u32, info.height as u32)
+    }
 }
 
 pub fn set_pixel_in(framebuffer: &mut FrameBuffer, position: Position, color: Color) {
