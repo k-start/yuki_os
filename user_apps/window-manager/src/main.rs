@@ -2,13 +2,10 @@
 #![no_main]
 
 use embedded_graphics::{
-    mock_display::MockDisplay,
     mono_font::{ascii::FONT_10X20, MonoTextStyle},
-    pixelcolor::{BinaryColor, Rgb888},
+    pixelcolor::Rgb888,
     prelude::*,
-    primitives::{
-        Circle, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle, StrokeAlignment, Triangle,
-    },
+    primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
     text::{Alignment, Text},
 };
 use framebuffer::Display;
