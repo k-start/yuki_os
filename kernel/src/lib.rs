@@ -18,6 +18,7 @@ pub mod gdt;
 pub mod interrupts;
 pub mod keyboard;
 pub mod memory;
+pub mod mouse;
 pub mod process;
 pub mod scheduler;
 pub mod syscalls;
@@ -27,7 +28,7 @@ extern crate alloc;
 pub fn init(boot_info: &'static mut BootInfo) {
     x86_64::instructions::interrupts::disable();
     gdt::init();
-    interrupts::init_mouse();
+    mouse::init_mouse();
     interrupts::init();
     memory::init(
         boot_info.physical_memory_offset.into_option(),
