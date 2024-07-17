@@ -195,10 +195,21 @@ fn handle_syscall(regs: &mut Context) {
         MMAP => {
             let _fd = regs.r8;
 
-            // let pt = crate::memory::active_page_table().0;
-            // pt[0].set_addr(addr, flags)
+            let memory_info = unsafe { crate::memory::MEMORY_INFO.as_mut().unwrap() };
 
-            regs.rax = 0x18000000000;
+            let phys_addr = crate::memory::translate_addr(
+                VirtAddr::new(0x18000000000),
+                memory_info.phys_mem_offset,
+            )
+            .unwrap();
+
+            crate::memory::map_physical_address_to_user(
+                VirtAddr::new(0x400000000000),
+                phys_addr,
+                regs.rsi,
+            );
+
+            regs.rax = 0x400000000000;
         }
         IOCTL => {
             // FIX ME - expand to actually check arguments rather than just assume we are getting

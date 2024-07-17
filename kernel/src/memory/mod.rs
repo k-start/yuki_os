@@ -155,20 +155,14 @@ fn copy_pagetables(level_4_table: &PageTable) -> (*mut PageTable, PhysAddr) {
             if !entry.is_unused() {
                 if (level == 1) || entry.flags().contains(PageTableFlags::HUGE_PAGE) {
                     // Maps a frame, not a page table
-                    to_table[i].set_addr(
-                        entry.addr(),
-                        entry.flags() | PageTableFlags::USER_ACCESSIBLE,
-                    ); // FIX ME - USER ACCESSIBLE remove when proper mmap
+                    to_table[i].set_addr(entry.addr(), entry.flags());
                 } else {
                     // Create a new table at level - 1
                     let (new_table_ptr, new_table_physaddr) = create_empty_pagetable();
                     let to_table_m1 = unsafe { &mut *new_table_ptr };
 
                     // Point the entry to the new table
-                    to_table[i].set_addr(
-                        new_table_physaddr,
-                        entry.flags() | PageTableFlags::USER_ACCESSIBLE,
-                    ); // FIX ME - USER ACCESSIBLE remove when proper mmap
+                    to_table[i].set_addr(new_table_physaddr, entry.flags());
 
                     // Get reference to the input level-1 table
                     let from_table_m1 = {
@@ -303,6 +297,40 @@ pub unsafe fn deallocate_pages(
     }
 
     Ok(())
+}
+
+pub fn map_physical_address_to_user(virtaddr: VirtAddr, physaddr: PhysAddr, size: usize) {
+    use x86_64::structures::paging::PageTableFlags as Flags;
+
+    let memory_info = unsafe { MEMORY_INFO.as_mut().unwrap() };
+    let level_4_table = unsafe { active_level_4_table(memory_info.phys_mem_offset) }.0;
+    let mut mapper =
+        unsafe { OffsetPageTable::new(&mut *level_4_table, memory_info.phys_mem_offset) };
+
+    let page_range = {
+        let end_addr = virtaddr + size - 1u64;
+        let start_page = Page::<Size4KiB>::containing_address(virtaddr);
+        let end_page = Page::containing_address(end_addr);
+        Page::range_inclusive(start_page, end_page)
+    };
+
+    let mut frame_range = {
+        let end_addr = physaddr + size - 1u64;
+        let start_frame = PhysFrame::containing_address(physaddr);
+        let end_frame = PhysFrame::containing_address(end_addr);
+        PhysFrame::range_inclusive(start_frame, end_frame)
+    };
+
+    let flags = Flags::PRESENT | Flags::WRITABLE | Flags::USER_ACCESSIBLE;
+
+    for page in page_range {
+        let map_to_result = unsafe {
+            // FIXME: this is not safe, we do it only for testing
+            let frame = frame_range.next().unwrap();
+            mapper.map_to(page, frame, flags, &mut memory_info.frame_allocator)
+        };
+        map_to_result.expect("map_to failed").flush();
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
