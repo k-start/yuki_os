@@ -129,8 +129,6 @@ impl super::filesystem::FileSystem for FrameBufferFs<'static> {
     }
 
     fn ioctl(&self, _file: &File, _cmd: u32, arg: usize) -> Result<(), Error> {
-        let pointer = self.framebuffer.buffer().as_ptr();
-        println!("{:?}", pointer);
         let ptr: *mut FrameBufferInfo = arg as *mut FrameBufferInfo;
 
         unsafe {

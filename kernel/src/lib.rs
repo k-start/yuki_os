@@ -5,6 +5,7 @@
 #![feature(asm_const)]
 
 use bootloader_api::BootInfo;
+use fs::devfs::DevFs;
 
 use crate::fs::stdio::StdioFs;
 
@@ -28,7 +29,6 @@ extern crate alloc;
 pub fn init(boot_info: &'static mut BootInfo) {
     x86_64::instructions::interrupts::disable();
     gdt::init();
-    mouse::init_mouse();
     interrupts::init();
     memory::init(
         boot_info.physical_memory_offset.into_option(),
@@ -44,6 +44,10 @@ pub fn init(boot_info: &'static mut BootInfo) {
 
     let stdiofs = StdioFs::new();
     fs::vfs::mount("stdio", stdiofs);
+
+    let devfs = DevFs::new();
+    fs::vfs::mount("dev", devfs);
+    mouse::init_mouse();
 
     if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
         let framebufferfs = fs::framebuffer::FrameBufferFs::new(framebuffer);

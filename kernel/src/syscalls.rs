@@ -193,6 +193,7 @@ fn handle_syscall(regs: &mut Context) {
             // println!("open {filename}");
         }
         MMAP => {
+            // FIX ME - actually map properly, create usermode mapper
             let _fd = regs.r8;
 
             let memory_info = unsafe { crate::memory::MEMORY_INFO.as_mut().unwrap() };

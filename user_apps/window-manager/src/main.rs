@@ -39,6 +39,18 @@ fn main() {
         .draw(&mut display)
         .unwrap();
 
+    let mut mouse_state: [u8; 3] = [0; 3];
+    loop {
+        unsafe {
+            let fd = user_api::syscalls::open(b"/dev/mouse");
+            user_api::syscalls::read(fd, &mut mouse_state);
+        };
+
+        if mouse_state != [0; 3] {
+            println!("{:?}", mouse_state[1] as i8);
+        }
+    }
+
     let mut i = 0;
     let mut y = 0;
     let mut x: [u8; 1] = [0; 1];
