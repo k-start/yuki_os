@@ -50,7 +50,9 @@ fn main() {
     loop {
         let bytes_read = unsafe { user_api::syscalls::read(fd, &mut mouse_buf) };
 
-        if mouse_buf != [0; 3] && bytes_read > 0 {
+        let _ = mouse_buf == [0; 3]; // Fix me - weird bug where without this bytes_read = 0 even if they are read
+
+        if bytes_read > 0 {
             // println!("mouse bytes_read = {bytes_read}");
             println!("x = {}, y = {}", mouse_buf[1] as i8, mouse_buf[2] as i8,);
             println!(

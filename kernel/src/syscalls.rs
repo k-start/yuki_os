@@ -130,20 +130,6 @@ macro_rules! wrap {
 
 wrap!(handle_syscall => wrapped_syscall_handler);
 
-#[repr(align(8), C)]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Registers {
-    pub r11: usize,
-    pub r10: usize,
-    pub r9: usize,
-    pub r8: usize,
-    pub rdi: usize,
-    pub rsi: usize,
-    pub rdx: usize,
-    pub rcx: usize,
-    pub rax: usize,
-}
-
 pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
@@ -162,10 +148,9 @@ fn handle_syscall(regs: &mut Context) {
         READ => {
             let buf: &mut [u8] =
                 unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
-            let bytes_read = scheduler::SCHEDULER
+            regs.rax = scheduler::SCHEDULER
                 .read()
-                .read_file_descriptor(regs.rdi as u32, buf);
-            regs.rax = bytes_read as usize;
+                .read_file_descriptor(regs.rdi as u32, buf) as usize;
         }
         WRITE => unsafe {
             let slice: &[u8] =
@@ -178,7 +163,7 @@ fn handle_syscall(regs: &mut Context) {
                     .read()
                     .write_file_descriptor(regs.rdi as u32, slice);
             }
-            regs.rax = 0;
+            regs.rax = 3;
         },
         OPEN => {
             let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
