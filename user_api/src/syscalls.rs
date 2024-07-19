@@ -8,15 +8,17 @@ pub const FORK: usize = 57;
 pub const EXEC: usize = 59;
 pub const EXIT: usize = 60;
 
-pub unsafe fn read(fd: usize, buf: &mut [u8]) {
+pub unsafe fn read(fd: usize, buf: &mut [u8]) -> isize {
+    let r0;
     core::arch::asm!(
         "syscall",
-        in("rax") READ,
+        inlateout("rax") READ => r0,
         in("rdi") fd,
         in("rsi") buf.as_ptr(),
         in("rdx") buf.len(),
         options(nostack, preserves_flags)
     );
+    r0
 }
 
 pub unsafe fn write(fd: usize, buf: &[u8]) -> isize {

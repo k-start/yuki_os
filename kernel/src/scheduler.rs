@@ -10,6 +10,8 @@ use spin::RwLock;
 use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 
 pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
+static STACK_START: usize = 0x800000;
+static STACK_SIZE: usize = 0x100000;
 
 pub struct Scheduler {
     processes: RwLock<Vec<Process>>,
@@ -83,8 +85,8 @@ impl Scheduler {
         unsafe {
             memory::allocate_pages(
                 user_page_table_ptr,
-                VirtAddr::new(0x800000),
-                0x1000_u64,
+                VirtAddr::new(STACK_START as u64),
+                STACK_SIZE as u64,
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
@@ -96,7 +98,7 @@ impl Scheduler {
 
         let process = Process::new(
             VirtAddr::new(entry_point),
-            VirtAddr::new(0x801000),
+            VirtAddr::new((STACK_START + STACK_SIZE) as u64),
             user_page_table_physaddr,
             0,
         );
@@ -195,20 +197,22 @@ impl Scheduler {
             // FIX ME - implement copy on write later
             memory::allocate_pages(
                 current_page_table_ptr,
-                VirtAddr::new(0x801000),
-                0x1000_u64,
+                VirtAddr::new((STACK_START + STACK_SIZE) as u64),
+                STACK_SIZE as u64,
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
             )
             .expect("Could not allocate memory");
 
-            let new_stack: &mut [u8] =
-                core::slice::from_raw_parts_mut(VirtAddr::new(0x801000).as_mut_ptr(), 0x1000);
+            let new_stack: &mut [u8] = core::slice::from_raw_parts_mut(
+                VirtAddr::new((STACK_START + STACK_SIZE) as u64).as_mut_ptr(),
+                STACK_SIZE,
+            );
             let old_stack: &[u8] =
-                core::slice::from_raw_parts(VirtAddr::new(0x800000).as_ptr(), 0x1000);
+                core::slice::from_raw_parts(VirtAddr::new(STACK_START as u64).as_ptr(), STACK_SIZE);
 
-            new_stack.copy_from_slice(&old_stack[..0x1000]);
+            new_stack.copy_from_slice(&old_stack[..STACK_SIZE]);
         }
 
         let mut pid = 0;
@@ -219,7 +223,7 @@ impl Scheduler {
             let mut ctx = context.clone();
 
             ctx.rax = 0;
-            ctx.rsp += 0x1000;
+            ctx.rsp += STACK_SIZE;
             ctx.cs = code_selector.0 as usize;
             ctx.ss = data_selector.0 as usize;
             pid = self.get_available_pid();
@@ -289,8 +293,8 @@ impl Scheduler {
         unsafe {
             memory::allocate_pages(
                 user_page_table_ptr,
-                VirtAddr::new(0x800000),
-                0x1000_u64,
+                VirtAddr::new(STACK_START as u64),
+                STACK_SIZE as u64,
                 PageTableFlags::PRESENT
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
@@ -298,7 +302,7 @@ impl Scheduler {
             .expect("Could not allocate memory");
         }
 
-        context.rsp = 0x801000;
+        context.rsp = STACK_START + STACK_SIZE;
         context.rip = entry_point as usize;
         context.rcx = entry_point as usize;
         let (code_selector, data_selector) = crate::gdt::get_usermode_segments();
@@ -330,25 +334,35 @@ impl Scheduler {
         });
     }
 
-    pub fn read_file_descriptor(&self, id: u32, buf: &mut [u8]) {
-        self.cur_process.read().map(|cur_process_idx| {
-            let _ = fs::vfs::read(
-                self.processes.read()[cur_process_idx]
-                    .file_descriptors
-                    .get(&id)
-                    .unwrap(),
-                buf,
-            );
-        });
+    pub fn read_file_descriptor(&self, id: u32, buf: &mut [u8]) -> isize {
+        self.cur_process
+            .read()
+            .map(|cur_process_idx| {
+                fs::vfs::read(
+                    self.processes.read()[cur_process_idx]
+                        .file_descriptors
+                        .get(&id)
+                        .unwrap(),
+                    buf,
+                )
+                .unwrap_or(0)
+            })
+            .unwrap_or(0)
     }
 
     pub fn add_file_descriptor(&self, fd: &FileDescriptor) -> usize {
-        self.cur_process.read().map(|cur_process_idx| {
-            self.processes.write()[cur_process_idx]
-                .file_descriptors
-                .insert(3, fd.clone());
-        });
-        3
+        self.cur_process
+            .read()
+            .map(|cur_process_idx| {
+                let fd_idx: usize = self.processes.read()[cur_process_idx]
+                    .file_descriptors
+                    .len();
+                self.processes.write()[cur_process_idx]
+                    .file_descriptors
+                    .insert(fd_idx as u32, fd.clone());
+                fd_idx
+            })
+            .unwrap()
     }
 
     pub fn ioctl(&self, fd: usize, cmd: u32, args: usize) {

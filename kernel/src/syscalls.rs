@@ -162,10 +162,10 @@ fn handle_syscall(regs: &mut Context) {
         READ => {
             let buf: &mut [u8] =
                 unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
-            scheduler::SCHEDULER
+            let bytes_read = scheduler::SCHEDULER
                 .read()
                 .read_file_descriptor(regs.rdi as u32, buf);
-            regs.rax = 0;
+            regs.rax = bytes_read as usize;
         }
         WRITE => unsafe {
             let slice: &[u8] =

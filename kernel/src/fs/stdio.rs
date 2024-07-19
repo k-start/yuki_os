@@ -85,7 +85,7 @@ impl super::filesystem::FileSystem for StdioFs {
         }
     }
 
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<(), Error> {
+    fn read(&self, file: &File, buf: &mut [u8]) -> Result<isize, Error> {
         let split: Vec<&str> = file.path.split('/').collect();
         if split.len() != 2 {
             return Err(Error::FileDoesntExist);
@@ -96,11 +96,12 @@ impl super::filesystem::FileSystem for StdioFs {
         match proc_id {
             Ok(id) => {
                 if let Some(stdio) = self.fs.lock().get(&id) {
-                    match split[1] {
+                    let len = match split[1] {
                         "stdin" => stdio.read_stdin(buf),
                         "stdout" => stdio.read_stdout(buf),
                         _ => return Err(Error::FileDoesntExist),
                     };
+                    return Ok(len);
                 }
                 Err(Error::FileDoesntExist)
             }
@@ -183,15 +184,37 @@ impl Stdio {
         }
     }
 
-    pub fn read_stdin(&self, buf: &mut [u8]) {
+    pub fn read_stdin(&self, buf: &mut [u8]) -> isize {
+        let mut len_read = 0;
         for item in buf {
-            *item = self.stdin.lock().pop_front().unwrap_or(0);
+            *item = {
+                let data = self.stdin.lock().pop_front();
+                match data {
+                    Some(x) => {
+                        len_read = len_read + 1;
+                        x
+                    }
+                    None => 0,
+                }
+            };
         }
+        len_read
     }
 
-    pub fn read_stdout(&self, buf: &mut [u8]) {
+    pub fn read_stdout(&self, buf: &mut [u8]) -> isize {
+        let mut len_read = 0;
         for item in buf {
-            *item = self.stdout.lock().pop_front().unwrap_or(0);
+            *item = {
+                let data = self.stdout.lock().pop_front();
+                match data {
+                    Some(x) => {
+                        len_read = len_read + 1;
+                        x
+                    }
+                    None => 0,
+                }
+            };
         }
+        len_read
     }
 }

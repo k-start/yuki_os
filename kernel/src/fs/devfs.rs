@@ -52,10 +52,10 @@ impl super::filesystem::FileSystem for DevFs {
         })
     }
 
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<(), Error> {
+    fn read(&self, file: &File, buf: &mut [u8]) -> Result<isize, Error> {
         if let Some(device) = self.fs.lock().get(&file.path) {
-            device.read(buf);
-            return Ok(());
+            let len = device.read(buf);
+            return Ok(len);
         }
 
         Err(Error::FileDoesntExist)
@@ -114,9 +114,19 @@ impl Device {
         }
     }
 
-    pub fn read(&self, buf: &mut [u8]) {
+    pub fn read(&self, buf: &mut [u8]) -> isize {
+        let mut len_read = 0;
+        let mut data = self.data.lock();
         for item in buf {
-            *item = self.data.lock().pop_front().unwrap_or(0);
+            let byte = data.pop_front();
+            match byte {
+                Some(x) => {
+                    len_read = len_read + 1;
+                    *item = x;
+                }
+                None => {}
+            };
         }
+        len_read
     }
 }

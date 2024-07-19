@@ -13,7 +13,7 @@ pub enum Error {
 pub trait FileSystem {
     fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error>;
     fn open(&self, path: &str) -> Result<File, Error>;
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<(), Error>;
+    fn read(&self, file: &File, buf: &mut [u8]) -> Result<isize, Error>;
     fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error>;
     fn ioctl(&self, file: &File, cmd: u32, arg: usize) -> Result<(), Error>;
 }

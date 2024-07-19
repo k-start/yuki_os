@@ -34,7 +34,7 @@ pub fn open(path: &str) -> Result<FileDescriptor, Error> {
     }
 }
 
-pub fn read(file: &FileDescriptor, buf: &mut [u8]) -> Result<(), Error> {
+pub fn read(file: &FileDescriptor, buf: &mut [u8]) -> Result<isize, Error> {
     let fs = FS.lock();
 
     if let Some(device) = fs.get(&file.device) {

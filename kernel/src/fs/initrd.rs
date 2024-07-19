@@ -89,7 +89,7 @@ impl super::filesystem::FileSystem for InitRd<'_> {
         Err(Error::FileDoesntExist)
     }
 
-    fn read(&self, file: &File, buffer: &mut [u8]) -> Result<(), Error> {
+    fn read(&self, file: &File, buffer: &mut [u8]) -> Result<isize, Error> {
         let file_count = self.data[0];
 
         for i in 0..file_count {
@@ -114,7 +114,7 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                 buffer[..rd_file.size].copy_from_slice(&self.data[offset..(offset + rd_file.size)]);
             }
         }
-        Ok(())
+        Ok(0)
     }
 
     fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {

@@ -111,11 +111,11 @@ impl super::filesystem::FileSystem for FrameBufferFs<'static> {
         })
     }
 
-    fn read(&self, _file: &File, buf: &mut [u8]) -> Result<(), Error> {
+    fn read(&self, _file: &File, buf: &mut [u8]) -> Result<isize, Error> {
         let fb = self.framebuffer.buffer();
         buf.copy_from_slice(&fb[..buf.len()]);
 
-        Ok(())
+        Ok(buf.len() as isize)
     }
 
     fn write(&self, _file: &File, buf: &[u8]) -> Result<(), Error> {
