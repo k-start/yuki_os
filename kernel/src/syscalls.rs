@@ -163,7 +163,7 @@ fn handle_syscall(regs: &mut Context) {
                     .read()
                     .write_file_descriptor(regs.rdi as u32, slice);
             }
-            regs.rax = 3;
+            regs.rax = 0;
         },
         OPEN => {
             let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }

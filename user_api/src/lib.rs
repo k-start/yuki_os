@@ -6,7 +6,8 @@ pub mod syscalls;
 
 use core::panic::PanicInfo;
 #[panic_handler]
-pub fn panic(_info: &PanicInfo) -> ! {
+pub fn panic(info: &PanicInfo) -> ! {
+    println!("App panic!\n{:?}", info);
     unsafe {
         syscalls::exit();
     };
@@ -19,8 +20,21 @@ extern "C" {
 
 #[no_mangle]
 pub unsafe extern "C" fn _start() {
+    init_heap();
     #[cfg(not(test))]
     main();
     syscalls::exit();
     loop {}
+}
+
+use linked_list_allocator::LockedHeap;
+
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
+pub fn init_heap() {
+    let heap_start = 0x_5444_4444_0000;
+    let heap_size = 100 * 1024;
+    unsafe {
+        ALLOCATOR.lock().init(heap_start, heap_size);
+    }
 }

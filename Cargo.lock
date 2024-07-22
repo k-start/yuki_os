@@ -1180,6 +1180,9 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 [[package]]
 name = "user_api"
 version = "0.1.0"
+dependencies = [
+ "linked_list_allocator",
+]
 
 [[package]]
 name = "uuid"
@@ -1289,6 +1292,8 @@ name = "window-manager"
 version = "0.1.0"
 dependencies = [
  "embedded-graphics",
+ "lazy_static",
+ "spin 0.9.8",
  "user_api",
 ]
 
