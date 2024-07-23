@@ -12,6 +12,8 @@ use x86_64::{structures::paging::PageTableFlags, VirtAddr};
 pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
 static STACK_START: usize = 0x800000;
 static STACK_SIZE: usize = 0x100000;
+static HEAP_START: usize = 0x5000_0000_0000;
+static HEAP_SIZE: usize = 0x100000;
 
 pub struct Scheduler {
     processes: RwLock<Vec<Process>>,
@@ -81,7 +83,7 @@ impl Scheduler {
             .expect("Could not deallocate memory");
         }
 
-        // user heap
+        // user stack
         unsafe {
             memory::allocate_pages(
                 user_page_table_ptr,
@@ -91,7 +93,19 @@ impl Scheduler {
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
             )
-            .expect("Could not allocate memory");
+            .expect("Could not allocate user stack");
+        }
+        // user heap
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(HEAP_START as u64),
+                HEAP_SIZE as u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .expect("Could not allocate user heap");
         }
 
         memory::switch_to_pagetable(current_page_table_physaddr);

@@ -1,6 +1,5 @@
 pub mod allocator;
 pub mod slab_alloc;
-pub mod user_allocator;
 
 use core::arch::asm;
 
@@ -29,8 +28,6 @@ pub fn init(physical_memory_offset: Option<u64>, memory_regions: &'static Memory
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(memory_regions) };
 
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
-    user_allocator::init_heap(&mut mapper, &mut frame_allocator)
-        .expect("heap initialization failed");
 
     let level_4_table = unsafe { active_level_4_table(phys_mem_offset) };
 
