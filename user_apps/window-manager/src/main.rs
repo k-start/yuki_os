@@ -1,13 +1,8 @@
 #![no_std]
 #![no_main]
 
-use embedded_graphics::{
-    pixelcolor::Rgb888,
-    prelude::*,
-    primitives::{PrimitiveStyleBuilder, StrokeAlignment},
-};
 use event::mouseevent::MOUSE_EVENT;
-use framebuffer::Display;
+use world::WORLD;
 
 #[macro_use]
 extern crate user_api;
@@ -16,10 +11,12 @@ extern crate alloc;
 
 mod event;
 mod framebuffer;
+mod mouse;
+mod world;
 
 #[no_mangle]
 fn main() {
-    init_framebuffer();
+    mouse::Mouse::new();
 
     // let mut x = 0;
     // let mut y = 0;
@@ -28,6 +25,8 @@ fn main() {
 
     loop {
         MOUSE_EVENT.lock().poll();
+
+        WORLD.lock().render();
 
         // let bytes_read = unsafe { user_api::syscalls::read(0, &mut stdin_buf) };
 
@@ -58,28 +57,4 @@ fn main() {
         //     x = x + 1;
         // }
     }
-}
-
-fn init_framebuffer() {
-    let fd = unsafe { user_api::syscalls::open(b"/framebuffer/0") };
-
-    let mut fb = framebuffer::FrameBuffer::new(fd);
-    fb.clear();
-    let mut display = Display::new(&mut fb);
-
-    let border_stroke = PrimitiveStyleBuilder::new()
-        .stroke_color(Rgb888::WHITE)
-        .stroke_width(3)
-        .stroke_alignment(StrokeAlignment::Inside)
-        .build();
-    // let background_style = PrimitiveStyleBuilder::new()
-    //     .fill_color(Rgb888::BLACK)
-    //     .build();
-    // let character_style = MonoTextStyle::new(&FONT_10X20, Rgb888::WHITE);
-
-    display
-        .bounding_box()
-        .into_styled(border_stroke)
-        .draw(&mut display)
-        .unwrap();
 }

@@ -98,7 +98,7 @@ impl FrameBuffer {
         }
     }
 
-    fn info(&self) -> FrameBufferInfo {
+    pub fn info(&self) -> FrameBufferInfo {
         self.info
     }
 
