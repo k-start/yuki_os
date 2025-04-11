@@ -5,13 +5,7 @@ use spin::Mutex;
 
 use crate::{
     event::mouseevent::{MouseEvent, MouseEventListener, MOUSE_EVENT},
-    framebuffer::Display,
-    world::{Renderable, FRAMEBUFFER, WORLD},
-};
-use embedded_graphics::{
-    pixelcolor::Rgb888,
-    prelude::*,
-    primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
+    world::{Renderable, WORLD},
 };
 
 pub struct WindowManager {
@@ -36,16 +30,16 @@ impl MouseEventListener for WindowManager {
             let x = WORLD.lock().mouse_x;
             let y = WORLD.lock().mouse_y;
 
-            for i in self.windows.clone().into_iter() {
-                let (w_x, w_y, w_w, w_h) = i.lock().get_location();
+            // for i in self.windows.clone().into_iter() {
+            // let (w_x, w_y, w_w, w_h) = i.lock().get_location();
 
-                if x >= w_x && x <= w_x + w_w as i32 && y >= w_y && y <= w_y + w_h as i32 {
-                    i.lock().click(x - w_x, y - w_y);
-                    // break;
-                }
-            }
+            // if x >= w_x && x <= w_x + w_w as i32 && y >= w_y && y <= w_y + w_h as i32 {
+            //     i.lock().click(x - w_x, y - w_y);
+            //     // break;
+            // }
+            // }
 
-            // println!("{x} {y} click");
+            println!("{x} {y} click");
         }
     }
 }

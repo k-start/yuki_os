@@ -2,11 +2,7 @@ use crate::world::World;
 use alloc::sync::Arc;
 use spin::Mutex;
 
-use crate::{
-    event::mouseevent::{MouseEvent, MouseEventListener, MOUSE_EVENT},
-    framebuffer::Display,
-    world::{Renderable, FRAMEBUFFER, WORLD},
-};
+use crate::{framebuffer::Display, world::FRAMEBUFFER};
 use embedded_graphics::{
     pixelcolor::Rgb888,
     prelude::*,

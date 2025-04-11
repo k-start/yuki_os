@@ -2,7 +2,7 @@ use alloc::{sync::Arc, vec::Vec};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use crate::framebuffer::{self, Display, FrameBuffer};
+use crate::framebuffer::{self, FrameBuffer};
 
 lazy_static! {
     pub static ref FRAMEBUFFER: Mutex<FrameBuffer> = {
