@@ -12,10 +12,13 @@ extern crate alloc;
 mod event;
 mod framebuffer;
 mod mouse;
+mod window;
+mod windowmanager;
 mod world;
 
 #[no_mangle]
 fn main() {
+    windowmanager::WindowManager::new();
     mouse::Mouse::new();
 
     // let mut x = 0;

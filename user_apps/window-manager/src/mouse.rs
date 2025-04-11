@@ -1,3 +1,4 @@
+use crate::world::World;
 use alloc::sync::Arc;
 use spin::Mutex;
 
@@ -13,8 +14,6 @@ use embedded_graphics::{
 };
 
 pub struct Mouse {
-    x: i32,
-    y: i32,
     last_rendered_x: i32,
     last_rendered_y: i32,
 }
@@ -22,8 +21,6 @@ pub struct Mouse {
 impl Mouse {
     pub fn new() {
         let x = Arc::new(Mutex::new(Self {
-            x: 0,
-            y: 0,
             last_rendered_x: -1,
             last_rendered_y: -1,
         }));
@@ -34,26 +31,28 @@ impl Mouse {
 
 impl MouseEventListener for Mouse {
     fn handle(&mut self, e: MouseEvent) {
-        self.x = self.x + e.x_delta as i32;
-        self.y = self.y - e.y_delta as i32;
-        if self.x < 0 {
-            self.x = 0;
-        } else if self.x > FRAMEBUFFER.lock().info().width as i32 {
-            self.x = FRAMEBUFFER.lock().info().width as i32;
+        let mut world = WORLD.lock();
+        world.mouse_x += e.x_delta as i32;
+        world.mouse_y -= e.y_delta as i32;
+
+        if world.mouse_x < 0 {
+            world.mouse_x = 0;
+        } else if world.mouse_x > FRAMEBUFFER.lock().info().width as i32 {
+            world.mouse_x = FRAMEBUFFER.lock().info().width as i32;
         }
 
-        if self.y < 0 {
-            self.y = 0;
-        } else if self.y > FRAMEBUFFER.lock().info().height as i32 {
-            self.y = FRAMEBUFFER.lock().info().height as i32;
+        if world.mouse_y < 0 {
+            world.mouse_y = 0;
+        } else if world.mouse_y > FRAMEBUFFER.lock().info().height as i32 {
+            world.mouse_y = FRAMEBUFFER.lock().info().height as i32;
         }
         // println!("{:?}", e);
     }
 }
 
 impl Renderable for Mouse {
-    fn render(&mut self) {
-        if self.last_rendered_x != self.x || self.last_rendered_y != self.y {
+    fn render(&mut self, state: &World) {
+        if self.last_rendered_x != state.mouse_x || self.last_rendered_y != state.mouse_y {
             let mut fb = FRAMEBUFFER.lock();
             let mut display = Display::new(&mut fb);
 
@@ -71,12 +70,12 @@ impl Renderable for Mouse {
             .into_styled(black_style)
             .draw(&mut display)
             .unwrap();
-            Rectangle::new(Point::new(self.x, self.y), Size::new(5, 5))
+            Rectangle::new(Point::new(state.mouse_x, state.mouse_y), Size::new(5, 5))
                 .into_styled(white_style)
                 .draw(&mut display)
                 .unwrap();
-            self.last_rendered_x = self.x;
-            self.last_rendered_y = self.y;
+            self.last_rendered_x = state.mouse_x;
+            self.last_rendered_y = state.mouse_y;
         }
     }
 }

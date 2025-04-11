@@ -58,8 +58,8 @@ impl MouseEventHandler {
 pub struct MouseEvent {
     pub x_delta: i8,
     pub y_delta: i8,
-    left: bool,
-    right: bool,
+    pub left: bool,
+    pub right: bool,
 }
 
 pub trait MouseEventListener {

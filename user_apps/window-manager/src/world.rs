@@ -1,9 +1,4 @@
 use alloc::{sync::Arc, vec::Vec};
-use embedded_graphics::{
-    pixelcolor::Rgb888,
-    prelude::*,
-    primitives::{PrimitiveStyleBuilder, StrokeAlignment},
-};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -19,28 +14,19 @@ lazy_static! {
 
 pub struct World {
     objects: Vec<Arc<Mutex<dyn Renderable + Send>>>,
+    pub mouse_x: i32,
+    pub mouse_y: i32,
 }
 
 impl World {
     fn new() -> Self {
         let mut fb = FRAMEBUFFER.lock();
         fb.clear();
-        let mut display = Display::new(&mut fb);
-
-        let border_stroke = PrimitiveStyleBuilder::new()
-            .stroke_color(Rgb888::WHITE)
-            .stroke_width(3)
-            .stroke_alignment(StrokeAlignment::Inside)
-            .build();
-
-        display
-            .bounding_box()
-            .into_styled(border_stroke)
-            .draw(&mut display)
-            .unwrap();
 
         World {
             objects: Vec::new(),
+            mouse_x: 0,
+            mouse_y: 0,
         }
     }
 
@@ -50,11 +36,11 @@ impl World {
 
     pub fn render(&self) {
         for o in &self.objects {
-            o.lock().render()
+            o.lock().render(self)
         }
     }
 }
 
 pub trait Renderable {
-    fn render(&mut self);
+    fn render(&mut self, state: &World);
 }
