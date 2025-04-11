@@ -21,6 +21,7 @@ pub static BOOTLOADER_CONFIG: BootloaderConfig = {
 bootloader_api::entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
+    // boot through lib
     kernel_lib::init(boot_info);
     println!("Welcome to Yuki OS");
     kernel_lib::hlt_loop();
