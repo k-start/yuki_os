@@ -4,10 +4,10 @@ use crate::{
     gdt, memory,
     process::{Context, Process, ProcessState},
 };
-use alloc::{string::String, vec::Vec};
+use alloc::{boxed::Box, string::String, vec::Vec};
 use elfloader::ElfBinary;
 use spin::RwLock;
-use x86_64::{structures::paging::PageTableFlags, VirtAddr};
+use x86_64::{registers::rflags::RFlags, structures::paging::PageTableFlags, VirtAddr};
 
 pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
 static STACK_START: usize = 0x800000;
@@ -16,7 +16,7 @@ static HEAP_START: usize = 0x5000_0000_0000;
 static HEAP_SIZE: usize = 0x100000;
 
 pub struct Scheduler {
-    processes: RwLock<Vec<Process>>,
+    processes: RwLock<Vec<Box<Process>>>,
     cur_process: RwLock<Option<usize>>,
     allocated_ids: RwLock<Vec<usize>>,
 }
@@ -118,7 +118,7 @@ impl Scheduler {
         );
 
         self.allocated_ids.write().push(process.process_id);
-        self.processes.write().push(process);
+        self.processes.write().push(Box::new(process));
     }
 
     /// Initialize a new OffsetPageTable.
@@ -129,58 +129,79 @@ impl Scheduler {
     /// This should only be called by the interrupt that is switching
     /// contexts.
     pub unsafe fn save_current_context(&self, context: *const Context) {
-        self.cur_process.read().map(|cur_process_idx| {
-            if self.processes.read()[cur_process_idx].state == ProcessState::Exiting() {
-                let pid = self.processes.read()[cur_process_idx].process_id;
+        if let Some(cur_process_idx) = *self.cur_process.read() {
+            // A write lock is needed here to prevent deadlocks with run_next
+            let mut processes = self.processes.write();
+            if cur_process_idx >= processes.len() {
+                return;
+            }
+            if processes[cur_process_idx].state == ProcessState::Exiting() {
+                let pid = processes[cur_process_idx].process_id;
                 self.allocated_ids.write().remove(pid);
-                self.processes.write().remove(cur_process_idx);
+                processes.remove(cur_process_idx);
                 println!("Exited process #{}", pid);
             } else {
                 let ctx = (*context).clone();
-                self.processes.write()[cur_process_idx].state = ProcessState::SavedContext(ctx);
-            }
-        });
-    }
-
-    pub fn run_next(&self) -> Context {
-        let processes_len = self.processes.read().len(); // how many processes are available
-        if processes_len > 0 {
-            let process_state = {
-                let mut cur_process_opt = self.cur_process.write(); // lock the current process index
-
-                let next_process = if cur_process_opt.is_none() {
-                    // properly start at process 0
-                    0
-                } else {
-                    let cur_process = cur_process_opt.get_or_insert(0); // default to 0
-                    (*cur_process + 1) % processes_len // next process index
-                };
-
-                let cur_process = cur_process_opt.get_or_insert(processes_len);
-                *cur_process = next_process;
-                let process = &self.processes.read()[next_process]; // get the next process
-
-                // println!("Switching to process #{} ({})", cur_process, process);
-
-                memory::switch_to_pagetable(process.page_table_phys);
-
-                process.state.clone() // clone process state information
-            }; // release held locks
-            match process_state {
-                ProcessState::SavedContext(context) => {
-                    return context; // either restore the saved context
-                }
-                ProcessState::StartingInfo(exec_base, stack_end) => {
-                    jmp_to_usermode(exec_base, stack_end); // or initialize the process with the given instruction, stack pointers
-                    todo!();
-                }
-                ProcessState::Exiting() => {
-                    todo!();
-                }
+                processes[cur_process_idx].state = ProcessState::SavedContext(ctx);
             }
         }
+    }
 
-        todo!();
+    pub fn run_next(&self) -> *const Context {
+        // We take a write lock on processes because we might need to initialize a new process
+        // by transitioning it from `StartingInfo` to `SavedContext`
+        let mut processes = self.processes.write();
+        let processes_len = processes.len();
+
+        if processes_len == 0 {
+            return core::ptr::null(); // No processes to run
+        }
+
+        // Determine and update the current process index
+        let next_idx = {
+            let mut cur_process_opt = self.cur_process.write();
+            let next = cur_process_opt.map_or(0, |current| (current + 1) % processes_len);
+            *cur_process_opt = Some(next);
+            next
+        };
+
+        let process = &mut processes[next_idx];
+
+        // If the process is exiting, we should skip it to the next process
+        if process.state == ProcessState::Exiting() {
+            // TODO: Find the next runnable process instead of giving up
+            return core::ptr::null();
+        }
+
+        memory::switch_to_pagetable(process.page_table_phys);
+
+        // If the process is new, it's in a `StartingInfo` state
+        // We must transition it to `SavedContext` to run it
+        if let ProcessState::StartingInfo(entry_point, stack_top) = process.state {
+            // This is the first time we're running this process. We need to create a context that
+            // will jump to the program's entry point in user mode
+            let (code_selector, data_selector) = gdt::get_usermode_segments();
+
+            let mut context = Context::default();
+            context.rip = entry_point.as_u64() as usize;
+            context.rsp = stack_top.as_u64() as usize;
+            context.rflags = (RFlags::INTERRUPT_FLAG).bits() as usize;
+            context.cs = code_selector.0 as usize;
+            context.ss = data_selector.0 as usize;
+
+            // Transition the process to a runnable state with the new context.
+            process.state = ProcessState::SavedContext(context);
+        }
+
+        // Now we can be sure the state is `SavedContext`
+        // We then return the context to the calling interrupt to return to that context
+        let context_ptr = match &process.state {
+            ProcessState::SavedContext(context) => context as *const Context,
+            // We've handled Exiting and StartingInfo above.
+            _ => unreachable!(),
+        };
+
+        context_ptr
     }
 
     pub fn exit_current(&self) {
@@ -252,7 +273,9 @@ impl Scheduler {
             }
         });
 
-        self.processes.write().push(child_process.unwrap());
+        self.processes
+            .write()
+            .push(Box::new(child_process.unwrap()));
 
         pid
     }
@@ -404,27 +427,5 @@ impl Scheduler {
             }
         }
         return 0;
-    }
-}
-
-#[inline(never)]
-pub fn jmp_to_usermode(code: VirtAddr, stack_end: VirtAddr) {
-    unsafe {
-        let (cs_idx, ds_idx) = gdt::set_usermode_segments();
-        x86_64::instructions::tlb::flush_all(); // flush the TLB after address-space switch
-
-        core::arch::asm!(
-            "cli",        // Disable interrupts
-            "push {:r}",  // Stack segment (SS)
-            "push {:r}",  // Stack pointer (RSP)
-            "push 0x200", // RFLAGS with interrupts enabled
-            "push {:r}",  // Code segment (CS)
-            "push {:r}",  // Instruction pointer (RIP)
-            "iretq",
-            in(reg) ds_idx,
-            in(reg) stack_end.as_u64(),
-            in(reg) cs_idx,
-            in(reg) code.as_u64(),
-        );
     }
 }

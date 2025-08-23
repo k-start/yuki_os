@@ -122,8 +122,7 @@ extern "C" fn timer_interrupt_handler(context_addr: *const Context) -> *const Co
             .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
 
-    let next = scheduler::SCHEDULER.read().run_next();
-    &next as *const Context
+    scheduler::SCHEDULER.read().run_next()
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
