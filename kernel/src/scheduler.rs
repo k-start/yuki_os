@@ -7,7 +7,11 @@ use crate::{
 use alloc::{boxed::Box, string::String, vec::Vec};
 use elfloader::ElfBinary;
 use spin::RwLock;
-use x86_64::{registers::rflags::RFlags, structures::paging::PageTableFlags, VirtAddr};
+use x86_64::{
+    registers::rflags::RFlags,
+    structures::paging::{PageTable, PageTableFlags},
+    VirtAddr,
+};
 
 pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
 static STACK_START: usize = 0x800000;
@@ -60,71 +64,9 @@ impl Scheduler {
 
         memory::switch_to_pagetable(user_page_table_physaddr);
 
-        // let file_buf = if let Some(ptr) = file.ptr {
-        //     unsafe { core::slice::from_raw_parts_mut(ptr as *mut u8, file.size as usize) }
-        // } else {
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(0x500000000000),
-                file.file.size,
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate memory");
-        }
-
-        // fix me - terrible loading
-        let file_buf: &mut [u8] = unsafe {
-            core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.file.size as usize)
-        };
-        let _ = fs::vfs::read(&file, file_buf);
-        //     file_buf
-        // };
-
-        let binary = ElfBinary::new(file_buf).unwrap();
-        let mut loader = elf::loader::UserspaceElfLoader {
-            vbase: 0x400000,
-            user_page_table_ptr,
-        };
-        binary.load(&mut loader).expect("Can't load the binary");
-
-        let entry_point = loader.vbase + binary.entry_point();
-
-        unsafe {
-            memory::deallocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(0x500000000000),
-                file.file.size,
-            )
-            .expect("Could not deallocate memory");
-        }
-
-        // user stack
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(STACK_START as u64),
-                STACK_SIZE as u64,
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate user stack");
-        }
-        // user heap
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(HEAP_START as u64),
-                HEAP_SIZE as u64,
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate user heap");
-        }
+        let entry_point = self
+            .load_elf(&file, user_page_table_ptr)
+            .expect("Failed to load ELF for new process");
 
         memory::switch_to_pagetable(current_page_table_physaddr);
 
@@ -339,71 +281,13 @@ impl Scheduler {
         println!("{:?}", filename);
         let file = fs::vfs::open(&filename).unwrap();
 
-        let (_current_page_table_ptr, _current_page_table_physaddr) = memory::active_page_table();
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
         memory::switch_to_pagetable(user_page_table_physaddr);
 
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(0x500000000000),
-                file.file.size as u64,
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate memory");
-        }
-
-        let file_buf: &mut [u8] = unsafe {
-            core::slice::from_raw_parts_mut(0x500000000000 as *mut u8, file.file.size as usize)
-        };
-        let _ = fs::vfs::read(&file, file_buf);
-
-        let binary = ElfBinary::new(file_buf).unwrap();
-        let mut loader = elf::loader::UserspaceElfLoader {
-            vbase: 0x400000,
-            user_page_table_ptr,
-        };
-        binary.load(&mut loader).expect("Can't load the binary");
-
-        let entry_point = loader.vbase + binary.entry_point();
-
-        unsafe {
-            memory::deallocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(0x500000000000),
-                file.file.size as u64,
-            )
-            .expect("Could not deallocate memory");
-        }
-
-        // user stack
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(STACK_START as u64),
-                STACK_SIZE as u64,
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate user stack");
-        }
-
-        // user heap
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                VirtAddr::new(HEAP_START as u64),
-                HEAP_SIZE as u64,
-                PageTableFlags::PRESENT
-                    | PageTableFlags::WRITABLE
-                    | PageTableFlags::USER_ACCESSIBLE,
-            )
-            .expect("Could not allocate user heap");
-        }
+        let entry_point = self
+            .load_elf(&file, user_page_table_ptr)
+            .expect("Failed to load ELF for exec");
 
         context.rsp = STACK_START + STACK_SIZE;
         context.rip = entry_point as usize;
@@ -416,6 +300,80 @@ impl Scheduler {
             self.processes.write()[cur_process_idx].page_table_phys = user_page_table_physaddr;
         });
         0
+    }
+
+    /// Loads an ELF file into the provided page table, allocating stack and heap.
+    /// This function assumes that the provided `user_page_table_ptr` is active.
+    fn load_elf(
+        &self,
+        file: &FileDescriptor,
+        user_page_table_ptr: *mut PageTable,
+    ) -> Result<u64, &'static str> {
+        // Allocate a temporary buffer to read the ELF file into.
+        // TODO: Move from the heap address
+        let temp_elf_addr = VirtAddr::new(0x500000000000 as u64);
+        let temp_elf_size = file.file.size;
+
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                temp_elf_addr,
+                temp_elf_size,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE, // Kernel-only access
+            )
+            .map_err(|_| "Could not allocate memory for ELF buffer")?;
+        }
+
+        // Read the file into the buffer
+        let file_buf: &mut [u8] = unsafe {
+            core::slice::from_raw_parts_mut(temp_elf_addr.as_mut_ptr(), temp_elf_size as usize)
+        };
+        fs::vfs::read(file, file_buf).map_err(|_| "Failed to read ELF file")?;
+
+        // Parse and load the ELF binary
+        let binary = ElfBinary::new(file_buf).map_err(|_| "Failed to parse ELF file")?;
+        let mut loader = elf::loader::UserspaceElfLoader {
+            vbase: 0x400000,
+            user_page_table_ptr,
+        };
+        binary
+            .load(&mut loader)
+            .map_err(|_| "Failed to load ELF segments")?;
+        let entry_point = loader.vbase + binary.entry_point();
+
+        // Deallocate the temporary buffer
+        unsafe {
+            memory::deallocate_pages(user_page_table_ptr, temp_elf_addr, temp_elf_size)
+                .map_err(|_| "Could not deallocate ELF buffer")?;
+        }
+
+        // Allocate user stack
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(STACK_START as u64),
+                STACK_SIZE as u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .map_err(|_| "Could not allocate user stack")?;
+        }
+
+        // Allocate user heap
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(HEAP_START as u64),
+                HEAP_SIZE as u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .map_err(|_| "Could not allocate user heap")?;
+        }
+
+        Ok(entry_point)
     }
 
     pub fn push_stdin(&self, key: u8) {
