@@ -129,17 +129,37 @@ impl Scheduler {
     /// This should only be called by the interrupt that is switching
     /// contexts.
     pub unsafe fn save_current_context(&self, context: *const Context) {
-        if let Some(cur_process_idx) = *self.cur_process.read() {
-            // A write lock is needed here to prevent deadlocks with run_next
-            let mut processes = self.processes.write();
+        // Lock in a consistent order to prevent deadlocks: processes -> cur_process
+        let mut processes = self.processes.write();
+        let mut cur_process_opt = self.cur_process.write();
+
+        if let Some(cur_process_idx) = *cur_process_opt {
             if cur_process_idx >= processes.len() {
+                // This can happen if a process was removed and the index is now stale
                 return;
             }
+
             if processes[cur_process_idx].state == ProcessState::Exiting() {
                 let pid = processes[cur_process_idx].process_id;
-                self.allocated_ids.write().remove(pid);
-                processes.remove(cur_process_idx);
                 println!("Exited process #{}", pid);
+
+                // Find and remove the PID from the allocated list
+                if let Some(i) = self.allocated_ids.read().iter().position(|&x| x == pid) {
+                    self.allocated_ids.write().remove(i);
+                }
+
+                // Remove the process from the main list.
+                processes.remove(cur_process_idx);
+
+                // After removing a process, the list is shorter and indices may have shifted.
+                if processes.is_empty() {
+                    *cur_process_opt = None;
+                } else {
+                    // To ensure the scheduler doesn't skip a process, we set the "current"
+                    // index to be the one before the removed element. `run_next` will then
+                    // increment it to the correct next process
+                    *cur_process_opt = Some(cur_process_idx.wrapping_sub(1));
+                }
             } else {
                 let ctx = (*context).clone();
                 processes[cur_process_idx].state = ProcessState::SavedContext(ctx);
@@ -157,51 +177,55 @@ impl Scheduler {
             return core::ptr::null(); // No processes to run
         }
 
-        // Determine and update the current process index
-        let next_idx = {
-            let mut cur_process_opt = self.cur_process.write();
-            let next = cur_process_opt.map_or(0, |current| (current + 1) % processes_len);
-            *cur_process_opt = Some(next);
-            next
-        };
+        for _ in 0..processes_len {
+            // Determine and update the current process index
+            let next_idx = {
+                let mut cur_process_opt = self.cur_process.write();
+                let next = cur_process_opt.map_or(0, |current| (current + 1) % processes_len);
+                *cur_process_opt = Some(next);
+                next
+            };
 
-        let process = &mut processes[next_idx];
+            let process = &mut processes[next_idx];
 
-        // If the process is exiting, we should skip it to the next process
-        if process.state == ProcessState::Exiting() {
-            // TODO: Find the next runnable process instead of giving up
-            return core::ptr::null();
+            // If the process is runnable, prepare and return its context
+            if process.state != ProcessState::Exiting() {
+                memory::switch_to_pagetable(process.page_table_phys);
+
+                // If the process is new, it's in a `StartingInfo` state
+                // We must transition it to `SavedContext` to run it
+                if let ProcessState::StartingInfo(entry_point, stack_top) = process.state {
+                    // This is the first time we're running this process. We need to create a context that
+                    // will jump to the program's entry point in user mode
+                    let (code_selector, data_selector) = gdt::get_usermode_segments();
+
+                    let mut context = Context::default();
+                    context.rip = entry_point.as_u64() as usize;
+                    context.rsp = stack_top.as_u64() as usize;
+                    // CRITICAL: Bit 1 of RFLAGS is reserved and must be 1.
+                    context.rflags =
+                        (RFlags::INTERRUPT_FLAG | RFlags::from_bits_truncate(0x2)).bits() as usize;
+                    context.cs = code_selector.0 as usize;
+                    context.ss = data_selector.0 as usize;
+
+                    // Transition the process to a runnable state with the new context
+                    process.state = ProcessState::SavedContext(context);
+                }
+
+                // Now we can be sure the state is `SavedContext`
+                // We then return the context to the calling interrupt to return to that context
+                let context_ptr = match &process.state {
+                    ProcessState::SavedContext(context) => context as *const Context,
+                    _ => unreachable!(),
+                };
+
+                return context_ptr;
+            }
+            // If the process was exiting, the loop continues to the next one
         }
 
-        memory::switch_to_pagetable(process.page_table_phys);
-
-        // If the process is new, it's in a `StartingInfo` state
-        // We must transition it to `SavedContext` to run it
-        if let ProcessState::StartingInfo(entry_point, stack_top) = process.state {
-            // This is the first time we're running this process. We need to create a context that
-            // will jump to the program's entry point in user mode
-            let (code_selector, data_selector) = gdt::get_usermode_segments();
-
-            let mut context = Context::default();
-            context.rip = entry_point.as_u64() as usize;
-            context.rsp = stack_top.as_u64() as usize;
-            context.rflags = (RFlags::INTERRUPT_FLAG).bits() as usize;
-            context.cs = code_selector.0 as usize;
-            context.ss = data_selector.0 as usize;
-
-            // Transition the process to a runnable state with the new context.
-            process.state = ProcessState::SavedContext(context);
-        }
-
-        // Now we can be sure the state is `SavedContext`
-        // We then return the context to the calling interrupt to return to that context
-        let context_ptr = match &process.state {
-            ProcessState::SavedContext(context) => context as *const Context,
-            // We've handled Exiting and StartingInfo above.
-            _ => unreachable!(),
-        };
-
-        context_ptr
+        // TODO: Spin up a default process if all are exited
+        core::ptr::null()
     }
 
     pub fn exit_current(&self) {
