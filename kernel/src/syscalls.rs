@@ -225,7 +225,17 @@ fn handle_syscall(regs: &mut Context) {
             regs.rax = scheduler::SCHEDULER.read().exec(regs, filename);
         }
         EXIT => {
+            // Mark the current process as exiting.
             scheduler::SCHEDULER.read().exit_current();
+
+            // This process must not run anymore. We force a context switch
+            // by triggering a Timer interrupt which runs our context switching
+            // logic
+            unsafe {
+                asm!("int 32", options(nomem, nostack));
+            }
+
+            unreachable!();
         }
         _ => {}
     }

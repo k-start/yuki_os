@@ -36,6 +36,24 @@ impl Scheduler {
         }
     }
 
+    // Private helper to find a PID without taking a lock
+    // This should only be called when the `allocated_ids` lock is already held
+    fn get_available_pid_unlocked(&self, allocated_ids: &[usize]) -> usize {
+        for i in 1..1000 {
+            if !allocated_ids.contains(&i) {
+                return i;
+            }
+        }
+        panic!("No available PIDs left");
+    }
+
+    pub fn get_available_pid(&self) -> usize {
+        // This function is now a simple wrapper that takes the lock
+        // and calls the unlocked version
+        let allocated = self.allocated_ids.read();
+        self.get_available_pid_unlocked(&allocated)
+    }
+
     pub fn schedule(&self, file: FileDescriptor) {
         let (_current_page_table_ptr, current_page_table_physaddr) = memory::active_page_table();
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
@@ -110,15 +128,21 @@ impl Scheduler {
 
         memory::switch_to_pagetable(current_page_table_physaddr);
 
-        let process = Process::new(
+        let mut process = Process::new(
             VirtAddr::new(entry_point),
             VirtAddr::new((STACK_START + STACK_SIZE) as u64),
             user_page_table_physaddr,
             0,
         );
 
-        self.allocated_ids.write().push(process.process_id);
-        self.processes.write().push(Box::new(process));
+        // Acquire locks in the canonical order to prevent deadlocks:
+        // processes -> allocated_ids
+        let mut processes = self.processes.write();
+        let mut allocated_ids = self.allocated_ids.write();
+
+        process.process_id = self.get_available_pid_unlocked(&allocated_ids);
+        allocated_ids.push(process.process_id);
+        processes.push(Box::new(process));
     }
 
     /// Initialize a new OffsetPageTable.
@@ -129,40 +153,17 @@ impl Scheduler {
     /// This should only be called by the interrupt that is switching
     /// contexts.
     pub unsafe fn save_current_context(&self, context: *const Context) {
+        // This function should only save the context of the current process.
         // Lock in a consistent order to prevent deadlocks: processes -> cur_process
         let mut processes = self.processes.write();
-        let mut cur_process_opt = self.cur_process.write();
-
-        if let Some(cur_process_idx) = *cur_process_opt {
-            if cur_process_idx >= processes.len() {
-                // This can happen if a process was removed and the index is now stale
-                return;
-            }
-
-            if processes[cur_process_idx].state == ProcessState::Exiting() {
-                let pid = processes[cur_process_idx].process_id;
-                println!("Exited process #{}", pid);
-
-                // Find and remove the PID from the allocated list
-                if let Some(i) = self.allocated_ids.read().iter().position(|&x| x == pid) {
-                    self.allocated_ids.write().remove(i);
+        if let Some(cur_process_idx) = *self.cur_process.read() {
+            if cur_process_idx < processes.len() {
+                // Only save the context if the process is not already exiting
+                // If it's exiting, its context is frozen and will be removed in run_next
+                if processes[cur_process_idx].state != ProcessState::Exiting() {
+                    let ctx = (*context).clone();
+                    processes[cur_process_idx].state = ProcessState::SavedContext(ctx);
                 }
-
-                // Remove the process from the main list.
-                processes.remove(cur_process_idx);
-
-                // After removing a process, the list is shorter and indices may have shifted.
-                if processes.is_empty() {
-                    *cur_process_opt = None;
-                } else {
-                    // To ensure the scheduler doesn't skip a process, we set the "current"
-                    // index to be the one before the removed element. `run_next` will then
-                    // increment it to the correct next process
-                    *cur_process_opt = Some(cur_process_idx.wrapping_sub(1));
-                }
-            } else {
-                let ctx = (*context).clone();
-                processes[cur_process_idx].state = ProcessState::SavedContext(ctx);
             }
         }
     }
@@ -177,6 +178,29 @@ impl Scheduler {
             return core::ptr::null(); // No processes to run
         }
 
+        // Reap any exited "zombie" processes. This is the safe place to do it,
+        // as we are in the scheduler and not running in the context of any process
+        // that might be reaped.
+        let pids_to_reap: Vec<usize> = processes
+            .iter()
+            .filter(|p| p.state == ProcessState::Exiting())
+            .map(|p| {
+                println!("Reaping process #{}", p.process_id);
+                p.process_id
+            })
+            .collect();
+
+        if !pids_to_reap.is_empty() {
+            // Lock allocated_ids only after we've collected the PIDs to reap
+            // This maintains the `processes` -> `allocated_ids` lock order
+            let mut allocated = self.allocated_ids.write();
+            allocated.retain(|pid| !pids_to_reap.contains(pid));
+
+            processes.retain(|p| p.state != ProcessState::Exiting());
+        }
+        let processes_len = processes.len();
+
+        // Look for the next non-exiting process to run
         for _ in 0..processes_len {
             // Determine and update the current process index
             let next_idx = {
@@ -190,6 +214,8 @@ impl Scheduler {
 
             // If the process is runnable, prepare and return its context
             if process.state != ProcessState::Exiting() {
+                println!("Switching to process #{}", process.process_id);
+
                 memory::switch_to_pagetable(process.page_table_phys);
 
                 // If the process is new, it's in a `StartingInfo` state
@@ -229,28 +255,32 @@ impl Scheduler {
     }
 
     pub fn exit_current(&self) {
-        // FIX ME - janky exiting due to TSS not set up for syscall
-        self.cur_process.read().map(|cur_process_idx| {
-            println!(
-                "Exiting process #{}",
-                self.processes.read()[cur_process_idx].process_id
-            );
-            self.processes.write()[cur_process_idx].state = ProcessState::Exiting();
-        });
+        // This function is called from a syscall when a process wants to exit
+        // It marks the current process' state as `Exiting`
+        // The caller (syscall handler) forces a context switch
+        // immediately after this function returns
 
-        // let next_process = (*cur_process + 1) % processes_len;
-        // *cur_process = next_process;
-        // unsafe {
-        //     self.run_next();
-        // };
-        // x86_64::instructions::interrupts::enable();
-        // hlt_loop();
-        // unsafe {
-        //     core::arch::asm!("sti", "2:", "hlt", "jmp 2b");
-        // }
+        // Lock in the established order: processes -> cur_process to avoid deadlocks
+        let mut processes = self.processes.write();
+        let cur_process_opt = self.cur_process.read();
+
+        if let Some(cur_process_idx) = *cur_process_opt {
+            if cur_process_idx < processes.len() {
+                println!(
+                    "Process #{} is exiting",
+                    processes[cur_process_idx].process_id
+                );
+                processes[cur_process_idx].state = ProcessState::Exiting();
+            }
+        }
     }
 
     pub fn fork_current(&self, context: Context) -> usize {
+        // This function needs to read the current process and write to the process list
+        // and PID list. To avoid deadlocks, we must acquire all necessary locks
+        // up-front in the canonical order: processes -> cur_process -> allocated_ids
+        let mut processes = self.processes.write();
+        let cur_process_opt = self.cur_process.read();
         let (current_page_table_ptr, current_page_table_physaddr) = memory::active_page_table();
         unsafe {
             // FIX ME - implement copy on write later
@@ -274,34 +304,33 @@ impl Scheduler {
             new_stack.copy_from_slice(&old_stack[..STACK_SIZE]);
         }
 
-        let mut pid = 0;
+        if let Some(cur_process_idx) = *cur_process_opt {
+            if cur_process_idx < processes.len() {
+                let mut allocated_ids = self.allocated_ids.write();
+                let cur_process = &processes[cur_process_idx];
+                let (code_selector, data_selector) = crate::gdt::get_usermode_segments();
+                let mut ctx = context.clone();
 
-        let child_process = self.cur_process.read().map(|cur_process_idx| {
-            let cur_process = &self.processes.read()[cur_process_idx];
-            let (code_selector, data_selector) = crate::gdt::get_usermode_segments();
-            let mut ctx = context.clone();
+                ctx.rax = 0;
+                ctx.rsp += STACK_SIZE;
+                ctx.cs = code_selector.0 as usize;
+                ctx.ss = data_selector.0 as usize;
+                let pid = self.get_available_pid_unlocked(&allocated_ids);
 
-            ctx.rax = 0;
-            ctx.rsp += STACK_SIZE;
-            ctx.cs = code_selector.0 as usize;
-            ctx.ss = data_selector.0 as usize;
-            pid = self.get_available_pid();
+                allocated_ids.push(pid);
 
-            self.allocated_ids.write().push(pid);
-
-            Process {
-                process_id: pid,
-                state: ProcessState::SavedContext(ctx),
-                page_table_phys: current_page_table_physaddr, // Use same address space
-                file_descriptors: cur_process.file_descriptors.clone(),
+                let child_process = Process {
+                    process_id: pid,
+                    state: ProcessState::SavedContext(ctx),
+                    page_table_phys: current_page_table_physaddr, // Use same address space
+                    file_descriptors: cur_process.file_descriptors.clone(),
+                };
+                processes.push(Box::new(child_process));
+                return pid;
             }
-        });
+        }
 
-        self.processes
-            .write()
-            .push(Box::new(child_process.unwrap()));
-
-        pid
+        0 // Return 0 if fork failed
     }
 
     // exec sys_call function. Differs from `schedule` as it executes on the currently running process
@@ -441,15 +470,5 @@ impl Scheduler {
 
     pub fn get_cur_pid(&self) -> usize {
         self.processes.read()[self.cur_process.read().unwrap_or(0)].process_id
-    }
-
-    pub fn get_available_pid(&self) -> usize {
-        for i in 1..1000 {
-            // FIX ME - terrible search for PID
-            if !self.allocated_ids.read().contains(&i) {
-                return i;
-            }
-        }
-        return 0;
     }
 }

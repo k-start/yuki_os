@@ -21,6 +21,4 @@ fn main() {
     }
 
     println!("[{pid}] This prints once now!");
-
-    loop {}
 }

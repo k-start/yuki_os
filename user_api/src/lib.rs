@@ -24,7 +24,6 @@ pub unsafe extern "C" fn _start() {
     #[cfg(not(test))]
     main();
     syscalls::exit();
-    loop {}
 }
 
 use linked_list_allocator::LockedHeap;

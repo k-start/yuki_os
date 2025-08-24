@@ -65,7 +65,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
     // let file = fs::vfs::open("a:/test-binary").unwrap();
 
     // load  memory manager application and schedule it
-    let file2 = fs::vfs::open("/initrd/window-manager").unwrap();
+    let file2 = fs::vfs::open("/initrd/hello-world").unwrap();
 
     let sched = &scheduler::SCHEDULER.read();
     // sched.schedule(file);
