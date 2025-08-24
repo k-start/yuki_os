@@ -97,6 +97,7 @@ impl super::filesystem::FileSystem for FrameBufferFs<'static> {
             r#type: "file".to_string(),
             size: self.framebuffer.info().byte_len as u64,
             ptr: None,
+            offset: 0,
         });
         Ok(vec)
     }
@@ -108,6 +109,7 @@ impl super::filesystem::FileSystem for FrameBufferFs<'static> {
             r#type: "file".to_string(),
             size: self.framebuffer.info().byte_len as u64,
             ptr: None,
+            offset: 0,
         })
     }
 

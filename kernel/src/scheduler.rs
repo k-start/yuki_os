@@ -5,7 +5,6 @@ use crate::{
     process::{Context, Process, ProcessState},
 };
 use alloc::{boxed::Box, string::String, vec::Vec};
-use elfloader::ElfBinary;
 use spin::RwLock;
 use x86_64::{
     registers::rflags::RFlags,
@@ -18,6 +17,80 @@ static STACK_START: usize = 0x800000;
 static STACK_SIZE: usize = 0x100000;
 static HEAP_START: usize = 0x5000_0000_0000;
 static HEAP_SIZE: usize = 0x100000;
+
+// --- ELF Header Constants ---
+const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
+const EI_CLASS: usize = 4;
+const EI_DATA: usize = 5;
+const ELF_CLASS_64: u8 = 2;
+const ELF_DATA_2_LSB: u8 = 1;
+const ET_EXEC: u16 = 2;
+const EM_X86_64: u16 = 62;
+const ET_DYN: u16 = 3; // Position-Independent Executable
+const PT_LOAD: u32 = 1;
+
+// --- ELF Header Structs ---
+
+/// Represents the main ELF header at the start of the file
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ElfHeader {
+    e_ident: [u8; 16],
+    e_type: u16,
+    e_machine: u16,
+    e_version: u32,
+    e_entry: u64,
+    e_phoff: u64,
+    e_shoff: u64,
+    e_flags: u32,
+    e_ehsize: u16,
+    e_phentsize: u16,
+    e_phnum: u16,
+    e_shentsize: u16,
+    e_shnum: u16,
+    e_shstrndx: u16,
+}
+
+/// Represents a program header entry, which describes a segment
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ProgramHeader {
+    p_type: u32,
+    p_flags: u32,
+    p_offset: u64,
+    p_vaddr: u64,
+    p_paddr: u64,
+    p_filesz: u64,
+    p_memsz: u64,
+    p_align: u64,
+}
+
+// --- Dynamic Segment & Relocation Structs and Constants ---
+const PT_DYNAMIC: u32 = 2;
+const DT_NULL: u64 = 0;
+const DT_RELA: u64 = 7;
+const DT_RELASZ: u64 = 8;
+const DT_RELAENT: u64 = 9;
+const DT_JMPREL: u64 = 23;
+const DT_PLTRELSZ: u64 = 2;
+
+// Relocation type for x86_64
+const R_X86_64_RELATIVE: u32 = 8;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Dyn {
+    d_tag: u64,
+    d_val: u64, // d_un.d_val or d_un.d_ptr
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct Rela {
+    r_offset: u64,
+    r_info: u64,
+    r_addend: i64,
+}
 
 pub struct Scheduler {
     processes: RwLock<Vec<Box<Process>>>,
@@ -302,52 +375,113 @@ impl Scheduler {
         0
     }
 
-    /// Loads an ELF file into the provided page table, allocating stack and heap.
+    /// Loads an ELF file by reading its segments directly into the provided page table.
     /// This function assumes that the provided `user_page_table_ptr` is active.
     fn load_elf(
         &self,
         file: &FileDescriptor,
         user_page_table_ptr: *mut PageTable,
     ) -> Result<u64, &'static str> {
-        // Allocate a temporary buffer to read the ELF file into.
-        // TODO: Move from the heap address
-        let temp_elf_addr = VirtAddr::new(0x500000000000 as u64);
-        let temp_elf_size = file.file.size;
+        // NOTE: This implementation requires a `pread` (or `read_at`) function in your VFS
+        // that can read from an arbitrary offset in a file. For this example, we'll
+        // simulate it by cloning the file descriptor and setting the offset for each read
 
-        unsafe {
-            memory::allocate_pages(
-                user_page_table_ptr,
-                temp_elf_addr,
-                temp_elf_size,
-                PageTableFlags::PRESENT | PageTableFlags::WRITABLE, // Kernel-only access
-            )
-            .map_err(|_| "Could not allocate memory for ELF buffer")?;
+        let vbase = 0x400000;
+
+        let mut header_fd = file.clone();
+        header_fd.file.offset = 0;
+        let mut elf_header_buf = [0u8; core::mem::size_of::<ElfHeader>()];
+        fs::vfs::read(&header_fd, &mut elf_header_buf).map_err(|_| "Failed to read ELF header")?;
+        let elf_header: ElfHeader = unsafe { core::mem::transmute(elf_header_buf) };
+
+        // --- Validate ELF Header ---
+        if elf_header.e_ident[0..4] != ELF_MAGIC {
+            return Err("Invalid ELF magic number");
+        }
+        if elf_header.e_ident[EI_CLASS] != ELF_CLASS_64 {
+            return Err("Not a 64-bit ELF file");
+        }
+        if elf_header.e_ident[EI_DATA] != ELF_DATA_2_LSB {
+            return Err("Not a little-endian ELF file");
+        }
+        if elf_header.e_type != ET_EXEC && elf_header.e_type != ET_DYN {
+            return Err("Not an executable or PIE file");
+        }
+        if elf_header.e_machine != EM_X86_64 {
+            return Err("Not an x86_64 executable");
         }
 
-        // Read the file into the buffer
-        let file_buf: &mut [u8] = unsafe {
-            core::slice::from_raw_parts_mut(temp_elf_addr.as_mut_ptr(), temp_elf_size as usize)
-        };
-        fs::vfs::read(file, file_buf).map_err(|_| "Failed to read ELF file")?;
+        // --- Read Program Headers ---
+        let ph_offset = elf_header.e_phoff;
+        let ph_entsize = elf_header.e_phentsize as usize;
+        let ph_num = elf_header.e_phnum as usize;
+        let ph_table_size = ph_entsize * ph_num;
 
-        // Parse and load the ELF binary
-        let binary = ElfBinary::new(file_buf).map_err(|_| "Failed to parse ELF file")?;
-        let mut loader = elf::loader::UserspaceElfLoader {
-            vbase: 0x400000,
-            user_page_table_ptr,
-        };
-        binary
-            .load(&mut loader)
-            .map_err(|_| "Failed to load ELF segments")?;
-        let entry_point = loader.vbase + binary.entry_point();
+        let mut ph_table_buf = Vec::with_capacity(ph_table_size);
+        ph_table_buf.resize(ph_table_size, 0);
+        let mut ph_fd = file.clone();
+        ph_fd.file.offset = ph_offset;
+        fs::vfs::read(&ph_fd, &mut ph_table_buf).map_err(|_| "Failed to read program headers")?;
 
-        // Deallocate the temporary buffer
-        unsafe {
-            memory::deallocate_pages(user_page_table_ptr, temp_elf_addr, temp_elf_size)
-                .map_err(|_| "Could not deallocate ELF buffer")?;
+        let mut dynamic_vaddr = 0;
+
+        // --- Load Segments and find PT_DYNAMIC ---
+        for i in 0..ph_num {
+            let ph_buf_start = i * ph_entsize;
+            let ph_buf_end = ph_buf_start + ph_entsize;
+            let ph_entry_buf = &ph_table_buf[ph_buf_start..ph_buf_end];
+            let prog_header: ProgramHeader =
+                unsafe { core::ptr::read(ph_entry_buf.as_ptr() as *const _) };
+
+            match prog_header.p_type {
+                PT_LOAD => {
+                    let virt_addr = VirtAddr::new(vbase + prog_header.p_vaddr);
+                    let mem_size = prog_header.p_memsz;
+                    let file_size = prog_header.p_filesz;
+                    let file_offset = prog_header.p_offset;
+
+                    // Determine page flags from segment flags
+                    let mut page_flags = PageTableFlags::PRESENT
+                        | PageTableFlags::USER_ACCESSIBLE
+                        | PageTableFlags::WRITABLE;
+                    if (prog_header.p_flags & 0x2) != 0 {
+                        // PF_W: Writable
+                        page_flags |= PageTableFlags::WRITABLE;
+                    }
+                    if (prog_header.p_flags & 0x1) == 0 {
+                        // PF_X: Executable (invert for NO_EXECUTE)
+                        page_flags |= PageTableFlags::NO_EXECUTE;
+                    }
+
+                    // Allocate virtual memory for the segment
+                    unsafe {
+                        memory::allocate_pages(
+                            user_page_table_ptr,
+                            virt_addr,
+                            mem_size,
+                            page_flags,
+                        )
+                        .map_err(|_| "Failed to allocate pages for segment")?;
+                    }
+
+                    // Read segment data from file directly into the new memory
+                    let segment_slice = unsafe {
+                        core::slice::from_raw_parts_mut(virt_addr.as_mut_ptr(), file_size as usize)
+                    };
+                    let mut segment_fd = file.clone();
+                    segment_fd.file.offset = file_offset;
+                    fs::vfs::read(&segment_fd, segment_slice)
+                        .map_err(|_| "Failed to read segment data")?;
+                }
+                PT_DYNAMIC => {
+                    // This vaddr is the address of the _DYNAMIC array
+                    dynamic_vaddr = vbase + prog_header.p_vaddr;
+                }
+                _ => {}
+            }
         }
 
-        // Allocate user stack
+        // --- Allocate Stack and Heap ---
         unsafe {
             memory::allocate_pages(
                 user_page_table_ptr,
@@ -358,10 +492,6 @@ impl Scheduler {
                     | PageTableFlags::USER_ACCESSIBLE,
             )
             .map_err(|_| "Could not allocate user stack")?;
-        }
-
-        // Allocate user heap
-        unsafe {
             memory::allocate_pages(
                 user_page_table_ptr,
                 VirtAddr::new(HEAP_START as u64),
@@ -373,7 +503,83 @@ impl Scheduler {
             .map_err(|_| "Could not allocate user heap")?;
         }
 
-        Ok(entry_point)
+        // --- Process Relocations ---
+        if dynamic_vaddr != 0 {
+            let mut rela_addr = 0;
+            let mut rela_size = 0;
+            let mut rela_ent = 0;
+            let mut jmprel_addr = 0;
+            let mut pltrel_size = 0;
+
+            let mut dyn_ptr = dynamic_vaddr as *const Dyn;
+            unsafe {
+                while (*dyn_ptr).d_tag != DT_NULL {
+                    match (*dyn_ptr).d_tag {
+                        DT_RELA => rela_addr = (*dyn_ptr).d_val,
+                        DT_RELASZ => rela_size = (*dyn_ptr).d_val,
+                        DT_RELAENT => rela_ent = (*dyn_ptr).d_val,
+                        DT_JMPREL => jmprel_addr = (*dyn_ptr).d_val,
+                        DT_PLTRELSZ => pltrel_size = (*dyn_ptr).d_val,
+                        _ => {}
+                    }
+                    dyn_ptr = dyn_ptr.add(1);
+                }
+            }
+
+            // Process .rela.dyn relocations
+            if rela_addr != 0 {
+                self.perform_relocations(vbase, rela_addr, rela_size, rela_ent)?;
+            }
+            // Process .rela.plt relocations
+            if jmprel_addr != 0 {
+                // The size of a PLT relocation entry is always the size of Rela, so we don't need DT_PLTREL
+                self.perform_relocations(
+                    vbase,
+                    jmprel_addr,
+                    pltrel_size,
+                    core::mem::size_of::<Rela>() as u64,
+                )?;
+            }
+        }
+
+        Ok(vbase + elf_header.e_entry)
+    }
+
+    fn perform_relocations(
+        &self,
+        vbase: u64,
+        rela_addr: u64,
+        rela_size: u64,
+        rela_ent_size: u64,
+    ) -> Result<(), &'static str> {
+        if rela_ent_size as usize != core::mem::size_of::<Rela>() {
+            return Err("Unsupported RELA entry size");
+        }
+        let rela_count = rela_size / rela_ent_size;
+        let rela_table = unsafe {
+            core::slice::from_raw_parts((vbase + rela_addr) as *const Rela, rela_count as usize)
+        };
+
+        for rela in rela_table {
+            let r_type = (rela.r_info & 0xFFFFFFFF) as u32;
+            match r_type {
+                R_X86_64_RELATIVE => {
+                    // This is a relative relocation, add the load address (vbase)
+                    // The location to patch is at `vbase + r_offset`
+                    // The value to write is `vbase + r_addend`
+                    unsafe {
+                        let location = (vbase + rela.r_offset) as *mut u64;
+                        *location = (vbase as i64 + rela.r_addend) as u64;
+                    }
+                }
+                typ => {
+                    // Other relocation types like GLOB_DAT and JUMP_SLOT require symbol lookups,
+                    // which is a much larger feature (dynamic linking). For now we will ignore them.
+                    println!("Ignoring unsupported relocation type: {}", typ);
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn push_stdin(&self, key: u8) {

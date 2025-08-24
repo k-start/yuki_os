@@ -23,6 +23,7 @@ impl super::filesystem::FileSystem for StdioFs {
                     r#type: "dir".to_string(),
                     size: 0,
                     ptr: None,
+                    offset: 0,
                 });
             }
             return Ok(ret);
@@ -35,6 +36,7 @@ impl super::filesystem::FileSystem for StdioFs {
                     r#type: "file".to_string(),
                     size: io.stdin.lock().len() as u64,
                     ptr: None,
+                    offset: 0,
                 });
                 ret.push(File {
                     name: "stdout".to_string(),
@@ -42,6 +44,7 @@ impl super::filesystem::FileSystem for StdioFs {
                     r#type: "file".to_string(),
                     size: io.stdout.lock().len() as u64,
                     ptr: None,
+                    offset: 0,
                 });
                 return Ok(ret);
             }
@@ -70,6 +73,7 @@ impl super::filesystem::FileSystem for StdioFs {
                         r#type: "file".to_string(),
                         size: 0, // fixme
                         ptr: None,
+                        offset: 0,
                     });
                 }
                 self.fs.lock().insert(id, Stdio::new());
@@ -79,6 +83,7 @@ impl super::filesystem::FileSystem for StdioFs {
                     r#type: "file".to_string(),
                     size: 0, // fixme
                     ptr: None,
+                    offset: 0,
                 })
             }
             Err(_) => Err(Error::FileDoesntExist),

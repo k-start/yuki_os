@@ -23,6 +23,7 @@ impl super::filesystem::FileSystem for DevFs {
                     r#type: "file".to_string(),
                     size: 0,
                     ptr: None,
+                    offset: 0,
                 });
             }
             return Ok(ret);
@@ -39,6 +40,7 @@ impl super::filesystem::FileSystem for DevFs {
                 r#type: "file".to_string(),
                 size: 0, // fixme
                 ptr: None,
+                offset: 0,
             });
         }
 
@@ -49,6 +51,7 @@ impl super::filesystem::FileSystem for DevFs {
             r#type: "file".to_string(),
             size: 0, // fixme
             ptr: None,
+            offset: 0,
         })
     }
 

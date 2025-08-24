@@ -47,6 +47,7 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                             + 1,
                     ) as u64
                 }),
+                offset: 0,
             })
         }
 
@@ -82,6 +83,7 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                                 + 1,
                         ) as u64
                     }),
+                    offset: 0,
                 });
             }
         }
@@ -107,14 +109,21 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                 .trim_matches(char::from(0));
 
             if name == file.name {
-                let offset = rd_file.offset as usize
+                let fs_offset = rd_file.offset as usize
                     + file_count as usize * core::mem::size_of::<RdFile>()
                     + 1;
 
-                buffer[..rd_file.size].copy_from_slice(&self.data[offset..(offset + rd_file.size)]);
+                let offset = fs_offset + file.offset as usize;
+
+                // Calculate the number of bytes to copy, ensuring we don't read past the end of the file data
+                let bytes_to_copy =
+                    core::cmp::min(buffer.len(), rd_file.size - file.offset as usize);
+                buffer[..bytes_to_copy]
+                    .copy_from_slice(&self.data[offset..(offset + bytes_to_copy)]);
+                return Ok(bytes_to_copy as isize);
             }
         }
-        Ok(0)
+        Ok(0) // Should not be reached if file is found and read
     }
 
     fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {

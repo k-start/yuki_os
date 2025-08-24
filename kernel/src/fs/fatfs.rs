@@ -34,6 +34,7 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
                 },
                 size: entry.len(),
                 ptr: None,
+                offset: 0,
             });
         }
 
@@ -65,6 +66,7 @@ impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
                     r#type: "file".to_owned(),
                     size: file.len(),
                     ptr: None,
+                    offset: 0,
                 });
             }
         }

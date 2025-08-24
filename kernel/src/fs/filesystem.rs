@@ -25,6 +25,7 @@ pub struct File {
     pub r#type: String,
     pub size: u64,
     pub ptr: Option<u64>,
+    pub offset: u64,
 }
 
 #[derive(Default, Debug, Clone)]
