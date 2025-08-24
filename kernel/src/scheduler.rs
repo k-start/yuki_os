@@ -214,7 +214,7 @@ impl Scheduler {
 
             // If the process is runnable, prepare and return its context
             if process.state != ProcessState::Exiting() {
-                println!("Switching to process #{}", process.process_id);
+                // println!("Switching to process #{}", process.process_id);
 
                 memory::switch_to_pagetable(process.page_table_phys);
 
@@ -379,7 +379,7 @@ impl Scheduler {
             .expect("Could not deallocate memory");
         }
 
-        // user heap
+        // user stack
         unsafe {
             memory::allocate_pages(
                 user_page_table_ptr,
@@ -389,7 +389,20 @@ impl Scheduler {
                     | PageTableFlags::WRITABLE
                     | PageTableFlags::USER_ACCESSIBLE,
             )
-            .expect("Could not allocate memory");
+            .expect("Could not allocate user stack");
+        }
+
+        // user heap
+        unsafe {
+            memory::allocate_pages(
+                user_page_table_ptr,
+                VirtAddr::new(HEAP_START as u64),
+                HEAP_SIZE as u64,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
+            )
+            .expect("Could not allocate user heap");
         }
 
         context.rsp = STACK_START + STACK_SIZE;
