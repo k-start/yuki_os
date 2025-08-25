@@ -13,6 +13,7 @@ use crate::fs::stdio::StdioFs;
 pub mod print;
 
 pub mod ata;
+pub mod ata_pio;
 pub mod elf;
 pub mod fs;
 pub mod gdt;
