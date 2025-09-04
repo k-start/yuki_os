@@ -1,8 +1,8 @@
 use crate::{
-    fs::{self, filesystem::FileDescriptor},
+    fs::{self, file::FileDescriptor},
     scheduler,
 };
-use alloc::{collections::BTreeMap, format};
+use alloc::{collections::BTreeMap, format, sync::Arc};
 use core::fmt::Display;
 use x86_64::{PhysAddr, VirtAddr};
 
@@ -18,7 +18,7 @@ pub struct Process {
     pub process_id: usize,
     pub state: ProcessState,       // the current state of the process
     pub page_table_phys: PhysAddr, // the page table for this process
-    pub file_descriptors: BTreeMap<u32, FileDescriptor>, // file descriptors for Stdio
+    pub file_descriptors: BTreeMap<u32, Arc<FileDescriptor>>, // file descriptors for Stdio
 }
 
 impl Process {
@@ -35,8 +35,18 @@ impl Process {
         };
 
         let mut file_descriptors = BTreeMap::new();
-        file_descriptors.insert(0, fs::vfs::open(&format!("/stdio/{id}/stdin")).unwrap());
-        file_descriptors.insert(1, fs::vfs::open(&format!("/stdio/{id}/stdout")).unwrap());
+        // For a new process, create file descriptors for stdin and stdout
+        // These will point to the stdio virtual filesystem
+        // if let Ok(stdin) = fs::vfs::open(&format!("/stdio/{id}/stdin")) {
+        //     file_descriptors.insert(0, stdin);
+        // }
+        // if let Ok(stdout) = fs::vfs::open(&format!("/stdio/{id}/stdout")) {
+        //     // In a real implementation, you'd also open stderr, for now, just clone stdout
+        //     if let Some(stdout_fd) = stdout.clone().into_iter().next() {
+        //         file_descriptors.insert(2, stdout_fd);
+        //     }
+        //     file_descriptors.insert(1, stdout);
+        // }
 
         Process {
             process_id: id,

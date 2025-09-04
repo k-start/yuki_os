@@ -1,34 +1,13 @@
-use alloc::{string::String, vec::Vec};
+use alloc::sync::Arc;
 
-#[derive(Debug, Clone, Copy)]
-pub enum Error {
-    FileDoesntExist,
-    DirDoesntExist,
-    DeviceDoesntExist,
-    ReadError,
-    PathSplitError,
-    IoError,
+use crate::fs::{error::FsError, inode::InodeRef};
+
+pub trait Filesystem: Send + Sync {
+    /// Returns the root inode for this filesystem.
+    fn root(&self) -> Result<InodeRef, FsError>;
+
+    // You could add other filesystem-wide operations here, like `sync`.
+    // fn sync(&self) -> Result<(), FsError>;
 }
 
-pub trait FileSystem {
-    fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error>;
-    fn open(&self, path: &str) -> Result<File, Error>;
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<isize, Error>;
-    fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error>;
-    fn ioctl(&self, file: &File, cmd: u32, arg: usize) -> Result<(), Error>;
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct File {
-    pub name: String,
-    pub path: String,
-    pub r#type: String,
-    pub size: u64,
-    pub ptr: Option<u64>,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct FileDescriptor {
-    pub file: File,
-    pub device: String,
-}
+pub type FilesystemRef = Arc<dyn Filesystem>;

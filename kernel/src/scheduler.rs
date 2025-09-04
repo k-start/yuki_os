@@ -1,10 +1,10 @@
 use crate::{
     elf,
-    fs::{self, filesystem::FileDescriptor},
+    fs::{self, file::FileDescriptor},
     gdt, memory,
     process::{Context, Process, ProcessState},
 };
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use elfloader::ElfBinary;
 use spin::RwLock;
 use x86_64::{
@@ -312,7 +312,7 @@ impl Scheduler {
         // Allocate a temporary buffer to read the ELF file into.
         // TODO: Move from the heap address
         let temp_elf_addr = VirtAddr::new(0x500000000000 as u64);
-        let temp_elf_size = file.file.size;
+        let temp_elf_size = file.inode.size();
 
         unsafe {
             memory::allocate_pages(
@@ -395,7 +395,7 @@ impl Scheduler {
         });
     }
 
-    pub fn read_file_descriptor(&self, id: u32, buf: &mut [u8]) -> isize {
+    pub fn read_file_descriptor(&self, id: u32, buf: &mut [u8]) -> usize {
         self.cur_process
             .read()
             .map(|cur_process_idx| {
@@ -411,7 +411,7 @@ impl Scheduler {
             .unwrap_or(0)
     }
 
-    pub fn add_file_descriptor(&self, fd: &FileDescriptor) -> usize {
+    pub fn add_file_descriptor(&self, fd: Arc<FileDescriptor>) -> usize {
         self.cur_process
             .read()
             .map(|cur_process_idx| {
@@ -420,23 +420,23 @@ impl Scheduler {
                     .len();
                 self.processes.write()[cur_process_idx]
                     .file_descriptors
-                    .insert(fd_idx as u32, fd.clone());
+                    .insert(fd_idx as u32, fd);
                 fd_idx
             })
             .unwrap()
     }
 
     pub fn ioctl(&self, fd: usize, cmd: u32, args: usize) {
-        self.cur_process.read().map(|cur_process_idx| {
-            let _ = fs::vfs::ioctl(
-                self.processes.read()[cur_process_idx]
-                    .file_descriptors
-                    .get(&(fd as u32))
-                    .unwrap(),
-                cmd,
-                args,
-            );
-        });
+        // self.cur_process.read().map(|cur_process_idx| {
+        //     let _ = fs::vfs::ioctl(
+        //         self.processes.read()[cur_process_idx]
+        //             .file_descriptors
+        //             .get(&(fd as u32))
+        //             .unwrap(),
+        //         cmd,
+        //         args,
+        //     );
+        // });
     }
 
     pub fn get_cur_pid(&self) -> usize {

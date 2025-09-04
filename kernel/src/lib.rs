@@ -4,10 +4,14 @@
 #![feature(naked_functions)]
 #![feature(asm_const)]
 
+use crate::fs::{
+    stdio::StdioFs,
+    vfs::{self, MountTable},
+};
+use alloc::sync::Arc;
 use bootloader_api::BootInfo;
 use fs::devfs::DevFs;
-
-use crate::fs::stdio::StdioFs;
+use spin::Mutex;
 
 #[macro_use]
 pub mod print;
@@ -38,41 +42,41 @@ pub fn init(boot_info: &'static mut BootInfo) {
     );
     ata::init();
     syscalls::init();
-    fs::vfs::init();
 
     // Load ram disk and mount relevant virtual filesystems into memory
-    let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
-    let initrd = unsafe { fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize) };
-    fs::vfs::mount("initrd", initrd);
+    // let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
+    // let initrd = unsafe { fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize) };
+    // fs::vfs::mount("initrd", initrd);
 
-    let stdiofs = StdioFs::new();
-    fs::vfs::mount("stdio", stdiofs);
+    // let stdiofs = StdioFs::new();
+    // fs::vfs::mount("stdio", stdiofs);
 
-    let devfs = DevFs::new();
-    fs::vfs::mount("dev", devfs);
-    mouse::init_mouse();
+    // Take ownership of the framebuffer from the boot_info struct
+    // This is the idiomatic way to move a value out of a mutable reference
+    let framebuffer = boot_info.framebuffer.take().unwrap();
 
-    if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
-        let framebufferfs = fs::framebuffer::FrameBufferFs::new(framebuffer);
-        fs::vfs::mount("framebuffer", framebufferfs);
-    }
+    let devfs = DevFs::new(framebuffer);
+    vfs::mount("dev", Arc::new(devfs));
+    // mouse::init_mouse();
 
-    println!("{:?}", fs::vfs::list_dir("/framebuffer"));
+    // println!("{:?}", fs::vfs::list_dir("/framebuffer"));
 
-    // let device = fs::fat32ata::Fat32Ata::new(0);
-    // let fs = fs::fatfs::FatFs::new(device);
+    let device = fs::fat32ata::Fat32Ata::new(0);
+    let fs = fs::fatfs::FatFs::new(device).unwrap();
 
-    // fs::vfs::mount(fs);
-    // let file = fs::vfs::open("a:/test-binary").unwrap();
+    vfs::mount("a:", Arc::new(fs));
 
-    // load  memory manager application and schedule it
-    let file2 = fs::vfs::open("/initrd/hello-world").unwrap();
+    // // fs::vfs::mount(fs);
+    // // let file = fs::vfs::open("a:/test-binary").unwrap();
 
-    let sched = &scheduler::SCHEDULER.read();
-    // sched.schedule(file);
-    sched.schedule(file2);
+    // // load  memory manager application and schedule it
+    // let file2 = fs::vfs::open("/initrd/hello-world").unwrap();
 
-    println!("{:?}", fs::vfs::list_dir("/stdio/1"));
+    // let sched = &scheduler::SCHEDULER.read();
+    // // sched.schedule(file);
+    // sched.schedule(file2);
+
+    // println!("{:?}", fs::vfs::list_dir("/stdio/1"));
 
     x86_64::instructions::interrupts::enable();
 }

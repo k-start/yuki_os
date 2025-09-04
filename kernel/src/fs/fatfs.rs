@@ -1,102 +1,154 @@
-use crate::fs::filesystem::{Error, File};
-use alloc::{borrow::ToOwned, format, vec::Vec};
-use fatfs::{FileSystem, LossyOemCpConverter, NullTimeProvider, Read, Seek, Write};
+use alloc::{
+    format,
+    string::{String, ToString},
+    sync::Arc,
+};
+use fatfs::{FileSystem, LossyOemCpConverter, NullTimeProvider, Read, Seek, SeekFrom, Write};
+use spin::Mutex;
 
-pub struct FatFs<IO: Read + Write + Seek> {
-    fs: FileSystem<IO, NullTimeProvider, LossyOemCpConverter>,
+use crate::fs::{
+    error::FsError,
+    filesystem::Filesystem,
+    inode::{Inode, InodeKind, InodeRef},
+};
+
+/// A wrapper for the `fatfs` filesystem to implement the VFS `Filesystem` trait.
+/// It can be cloned to get multiple references to the same underlying filesystem.
+#[derive(Clone)]
+pub struct FatFs<IO: 'static + Read + Write + Seek + Send + Sync> {
+    fs: Arc<Mutex<FileSystem<IO, NullTimeProvider, LossyOemCpConverter>>>,
 }
 
-impl<IO: Read + Write + Seek> super::filesystem::FileSystem for FatFs<IO> {
-    fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error> {
-        let mut ret: Vec<File> = Vec::new();
-        let fs = &self.fs;
-        let dir_entry = match dir {
-            "" => Ok(fs.root_dir()),
-            _ => fs.root_dir().open_dir(dir),
-        };
-
-        let iter = match dir_entry {
-            Ok(x) => x.iter(),
-            Err(_) => return Err(Error::DirDoesntExist),
-        };
-
-        for i in iter {
-            if i.is_err() {
-                continue;
-            }
-            let entry = i.map_err(|_| Error::IoError)?;
-            ret.push(File {
-                name: entry.file_name(),
-                path: format!("{}/{}", dir, entry.file_name()),
-                r#type: match entry.is_file() {
-                    true => "file".to_owned(),
-                    false => "dir".to_owned(),
-                },
-                size: entry.len(),
-                ptr: None,
-            });
-        }
-
-        Ok(ret)
-    }
-
-    fn open(&self, path: &str) -> Result<File, Error> {
-        let split: Vec<&str> = path.split('/').collect();
-        let file_name = match split.last() {
-            Some(x) => *x,
-            None => return Err(Error::PathSplitError),
-        };
-
-        let fs = &self.fs;
-        let mut dir = fs.root_dir();
-
-        if split.len() > 1 {
-            let path = path.replace(file_name, "");
-            dir = dir.open_dir(&path).map_err(|_| Error::FileDoesntExist)?;
-        }
-
-        for file in dir.iter() {
-            let file = file.map_err(|_| Error::IoError)?;
-
-            if file.file_name() == file_name {
-                return Ok(File {
-                    name: file.file_name(),
-                    path: path.to_owned(),
-                    r#type: "file".to_owned(),
-                    size: file.len(),
-                    ptr: None,
-                });
-            }
-        }
-
-        Err(Error::FileDoesntExist)
-    }
-
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<isize, Error> {
-        let fs = &self.fs;
-        let dir = fs.root_dir();
-
-        let mut file = dir
-            .open_file(&file.path)
-            .map_err(|_| Error::FileDoesntExist)?;
-
-        file.read_exact(buf).map_err(|_| Error::ReadError)?;
-
-        Ok(buf.len() as isize)
-    }
-
-    fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {
-        todo!()
-    }
-
-    fn ioctl(&self, _file: &File, _cmd: u32, _arg: usize) -> Result<(), Error> {
-        todo!()
+impl<IO: Read + Write + Seek + Send + Sync> FatFs<IO> {
+    /// Creates a new `FatFs` instance from a block device.
+    pub fn new(device: IO) -> Result<Self, FsError> {
+        let options = fatfs::FsOptions::new();
+        let fs = FileSystem::new(device, options).map_err(|_e| FsError::IOError)?;
+        Ok(Self {
+            fs: Arc::new(Mutex::new(fs)),
+        })
     }
 }
 
-impl<IO: Read + Write + Seek> FatFs<IO> {
-    pub fn new(device: IO) -> Self {
-        let fs = fatfs::FileSystem::new(device, fatfs::FsOptions::new()).unwrap();
-        FatFs { fs }
+impl<IO: Read + Write + Seek + Send + Sync> Filesystem for FatFs<IO> {
+    fn root(&self) -> Result<InodeRef, FsError> {
+        // The root inode represents the root directory of the filesystem
+        let root_inode = Arc::new(FatInode::<IO> {
+            fs: self.fs.clone(),
+            path: "".to_string(),
+            kind: InodeKind::Directory,
+            size: 0, // FAT directories have a size of 0
+        });
+        Ok(root_inode)
     }
+}
+
+/// An Inode representation for a file or directory in a FAT filesystem.
+/// It uses the path to identify the entry, as `fatfs` objects cannot be stored directly.
+pub struct FatInode<IO: 'static + Read + Write + Seek + Send + Sync> {
+    /// A reference to the underlying filesystem, shared among all inodes
+    fs: Arc<Mutex<FileSystem<IO, NullTimeProvider, LossyOemCpConverter>>>,
+    /// The full path from the root to this inode
+    path: String,
+    /// The kind of inode (file or directory)
+    kind: InodeKind,
+    /// The size of the file in bytes. Always 0 for directories.
+    size: u64,
+}
+
+impl<IO: Read + Write + Seek + Send + Sync> Inode for FatInode<IO> {
+    fn kind(&self) -> InodeKind {
+        self.kind
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> Result<usize, FsError> {
+        if self.kind() == InodeKind::Directory {
+            return Err(FsError::IsADirectory);
+        }
+
+        // Lock the filesystem to perform I/O
+        let fs = self.fs.lock();
+        let mut file = fs
+            .root_dir()
+            .open_file(&self.path)
+            .map_err(|_e| FsError::IOError)?;
+
+        // Seek to the desired offset
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|_e| FsError::IOError)?;
+
+        // Read data into the buffer
+        let bytes_read = file.read(buf).map_err(|_e| FsError::IOError)?;
+        Ok(bytes_read)
+    }
+
+    fn write_at(&self, offset: u64, buf: &[u8]) -> Result<usize, FsError> {
+        if self.kind() == InodeKind::Directory {
+            return Err(FsError::IsADirectory);
+        }
+
+        let fs = self.fs.lock();
+        let mut file = fs
+            .root_dir()
+            .open_file(&self.path)
+            .map_err(|_e| FsError::IOError)?;
+
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|_e| FsError::IOError)?;
+
+        let bytes_written = file.write(buf).map_err(|_e| FsError::IOError)?;
+        Ok(bytes_written)
+    }
+
+    fn size(&self) -> u64 {
+        todo!()
+    }
+
+    // fn list_entries(&self) -> Result<Vec<DirEntry>, FsError> {
+    //     if self.kind() != InodeKind::Directory {
+    //         return Err(FsError::NotADirectory);
+    //     }
+
+    //     let fs = self.fs.lock();
+    //     let dir = fs
+    //         .root_dir()
+    //         .open_dir(&self.path)
+    //         .map_err(|e| FsError::Implementation(format!("fatfs open_dir error: {:?}", e)))?;
+
+    //     let mut entries = Vec::new();
+    //     for entry_result in dir.iter() {
+    //         let entry = entry_result
+    //             .map_err(|e| FsError::Implementation(format!("fatfs iter error: {:?}", e)))?;
+
+    //         // Skip '.' and '..' to avoid loops and confusion
+    //         if entry.file_name() == "." || entry.file_name() == ".." {
+    //             continue;
+    //         }
+
+    //         let entry_path = if self.path.is_empty() {
+    //             entry.file_name()
+    //         } else {
+    //             format!("{}/{}", self.path, entry.file_name())
+    //         };
+
+    //         let kind = if entry.is_dir() {
+    //             InodeKind::Directory
+    //         } else {
+    //             InodeKind::File
+    //         };
+
+    //         let inode: InodeRef = Arc::new(FatInode::<IO> {
+    //             fs: self.fs.clone(),
+    //             path: entry_path,
+    //             kind,
+    //             size: entry.len(),
+    //         });
+
+    //         entries.push(DirEntry {
+    //             name: entry.file_name(),
+    //             inode,
+    //         });
+    //     }
+    //     Ok(entries)
+    // }
 }

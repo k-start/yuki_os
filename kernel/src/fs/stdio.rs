@@ -1,140 +1,146 @@
 // Filesystem for storing STDIO for applications
-use super::filesystem::{Error, File};
+use super::{
+    error::FsError,
+    filesystem::Filesystem,
+    inode::{Inode, InodeKind, InodeRef},
+};
 use alloc::{
     collections::{BTreeMap, VecDeque},
     format,
+    string::String,
     string::ToString,
+    sync::Arc,
     vec::Vec,
 };
 use spin::Mutex;
 
+/// A virtual filesystem for process standard I/O streams (stdin, stdout)
+///
+/// This filesystem presents a directory for each process ID, containing
+/// `stdin` and `stdout` files. It is designed to be managed by the kernel's
+/// process management system, which should create and remove process entries.
+#[derive(Clone)]
 pub struct StdioFs {
-    fs: Mutex<BTreeMap<u32, Stdio>>,
+    // Arc is needed to share the filesystem data with the inodes
+    fs: Arc<Mutex<BTreeMap<u32, Arc<Stdio>>>>,
 }
 
-impl super::filesystem::FileSystem for StdioFs {
-    fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error> {
-        let mut ret: Vec<File> = Vec::new();
-        if dir.is_empty() {
-            for i in self.fs.lock().keys() {
-                ret.push(File {
-                    name: format!("{i}"),
-                    path: format!("{i}"),
-                    r#type: "dir".to_string(),
-                    size: 0,
-                    ptr: None,
-                });
-            }
-            return Ok(ret);
+/// An inode in the StdioFs, representing the root, a process directory, or a stream
+pub struct StdioInode {
+    fs: Arc<Mutex<BTreeMap<u32, Arc<Stdio>>>>,
+    kind: StdioInodeKind,
+}
+
+#[derive(Clone, Copy)]
+enum StdioInodeKind {
+    Root,
+    ProcessDir(u32),
+    Stream(u32, StreamKind),
+}
+
+#[derive(Clone, Copy)]
+enum StreamKind {
+    Stdin,
+    Stdout,
+}
+
+impl Filesystem for StdioFs {
+    fn root(&self) -> Result<InodeRef, FsError> {
+        Ok(Arc::new(StdioInode {
+            fs: self.fs.clone(),
+            kind: StdioInodeKind::Root,
+        }))
+    }
+}
+
+impl Inode for StdioInode {
+    fn kind(&self) -> InodeKind {
+        match self.kind {
+            StdioInodeKind::Root | StdioInodeKind::ProcessDir(_) => InodeKind::Directory,
+            StdioInodeKind::Stream(_, _) => InodeKind::File,
+        }
+    }
+
+    fn read_at(&self, _offset: u64, buf: &mut [u8]) -> Result<usize, FsError> {
+        // offset is ignored for streams
+        if let StdioInodeKind::Stream(pid, stream_kind) = self.kind {
+            let fs_lock = self.fs.lock();
+            let stdio = fs_lock.get(&pid).ok_or(FsError::NotFound)?;
+
+            let bytes_read = match stream_kind {
+                StreamKind::Stdin => stdio.read_stdin(buf),
+                StreamKind::Stdout => stdio.read_stdout(buf),
+            };
+            Ok(bytes_read)
         } else {
-            let proc_id: u32 = dir.parse().unwrap();
-            if let Some(io) = self.fs.lock().get(&proc_id) {
-                ret.push(File {
-                    name: "stdin".to_string(),
-                    path: format!("{proc_id}/stdin"),
-                    r#type: "file".to_string(),
-                    size: io.stdin.lock().len() as u64,
-                    ptr: None,
-                });
-                ret.push(File {
-                    name: "stdout".to_string(),
-                    path: format!("{proc_id}/stdout"),
-                    r#type: "file".to_string(),
-                    size: io.stdout.lock().len() as u64,
-                    ptr: None,
-                });
-                return Ok(ret);
-            }
-        }
-
-        Err(Error::DirDoesntExist)
-    }
-
-    fn open(&self, path: &str) -> Result<File, Error> {
-        let split: Vec<&str> = path.split('/').collect();
-        if split.len() != 2 {
-            return Err(Error::FileDoesntExist);
-        }
-
-        let proc_id = split[0].parse::<u32>();
-        // if !split[1].eq("stdin") || !split[1].eq("stdout") {
-        //     return Err(Error::FileDoesntExist);
-        // }
-
-        match proc_id {
-            Ok(id) => {
-                if let Some(_stdio) = self.fs.lock().get(&id) {
-                    return Ok(File {
-                        name: split[1].to_string(),
-                        path: path.to_string(),
-                        r#type: "file".to_string(),
-                        size: 0, // fixme
-                        ptr: None,
-                    });
-                }
-                self.fs.lock().insert(id, Stdio::new());
-                Ok(File {
-                    name: split[1].to_string(),
-                    path: path.to_string(),
-                    r#type: "file".to_string(),
-                    size: 0, // fixme
-                    ptr: None,
-                })
-            }
-            Err(_) => Err(Error::FileDoesntExist),
+            Err(FsError::IsADirectory)
         }
     }
 
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<isize, Error> {
-        let split: Vec<&str> = file.path.split('/').collect();
-        if split.len() != 2 {
-            return Err(Error::FileDoesntExist);
-        }
+    fn write_at(&self, _offset: u64, buf: &[u8]) -> Result<usize, FsError> {
+        // offset is ignored for streams
+        if let StdioInodeKind::Stream(pid, stream_kind) = self.kind {
+            let fs_lock = self.fs.lock();
+            let stdio = fs_lock.get(&pid).ok_or(FsError::NotFound)?;
 
-        let proc_id = split[0].parse::<u32>();
-
-        match proc_id {
-            Ok(id) => {
-                if let Some(stdio) = self.fs.lock().get(&id) {
-                    let len = match split[1] {
-                        "stdin" => stdio.read_stdin(buf),
-                        "stdout" => stdio.read_stdout(buf),
-                        _ => return Err(Error::FileDoesntExist),
-                    };
-                    return Ok(len);
-                }
-                Err(Error::FileDoesntExist)
-            }
-            Err(_) => Err(Error::FileDoesntExist),
+            let bytes_written = match stream_kind {
+                StreamKind::Stdin => stdio.write_stdin(buf),
+                StreamKind::Stdout => stdio.write_stdout(buf),
+            };
+            Ok(bytes_written)
+        } else {
+            Err(FsError::IsADirectory)
         }
     }
 
-    fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error> {
-        let split: Vec<&str> = file.path.split('/').collect();
-        if split.len() != 2 {
-            return Err(Error::FileDoesntExist);
-        }
-
-        let proc_id = split[0].parse::<u32>();
-
-        match proc_id {
-            Ok(id) => {
-                if let Some(stdio) = self.fs.lock().get(&id) {
-                    match split[1] {
-                        "stdin" => stdio.write_stdin(buf),
-                        "stdout" => stdio.write_stdout(buf),
-                        _ => return Err(Error::FileDoesntExist),
-                    };
-                }
-                Err(Error::FileDoesntExist)
-            }
-            Err(_) => Err(Error::FileDoesntExist),
-        }
-    }
-
-    fn ioctl(&self, _file: &File, _cmd: u32, _arg: usize) -> Result<(), Error> {
+    fn size(&self) -> u64 {
         todo!()
     }
+
+    // fn list_entries(&self) -> Result<Vec<DirEntry>, FsError> {
+    //     let mut entries = Vec::new();
+    //     let fs_lock = self.fs.lock();
+
+    //     match self.kind {
+    //         StdioInodeKind::Root => {
+    //             for pid in fs_lock.keys() {
+    //                 let inode: InodeRef = Arc::new(StdioInode {
+    //                     fs: self.fs.clone(),
+    //                     kind: StdioInodeKind::ProcessDir(*pid),
+    //                 });
+    //                 entries.push(DirEntry {
+    //                     name: pid.to_string(),
+    //                     inode,
+    //                 });
+    //             }
+    //         }
+    //         StdioInodeKind::ProcessDir(pid) => {
+    //             if !fs_lock.contains_key(&pid) {
+    //                 return Err(FsError::EntryNotFound);
+    //             }
+
+    //             let stdin_inode: InodeRef = Arc::new(StdioInode {
+    //                 fs: self.fs.clone(),
+    //                 kind: StdioInodeKind::Stream(pid, StreamKind::Stdin),
+    //             });
+    //             entries.push(DirEntry {
+    //                 name: "stdin".to_string(),
+    //                 inode: stdin_inode,
+    //             });
+
+    //             let stdout_inode: InodeRef = Arc::new(StdioInode {
+    //                 fs: self.fs.clone(),
+    //                 kind: StdioInodeKind::Stream(pid, StreamKind::Stdout),
+    //             });
+    //             entries.push(DirEntry {
+    //                 name: "stdout".to_string(),
+    //                 inode: stdout_inode,
+    //             });
+    //         }
+    //         StdioInodeKind::Stream(_, _) => return Err(FsError::NotADirectory),
+    //     }
+    //     Ok(entries)
+    // }
 }
 
 impl Default for StdioFs {
@@ -144,13 +150,25 @@ impl Default for StdioFs {
 }
 
 impl StdioFs {
+    /// Creates a new, empty StdioFs
     pub fn new() -> Self {
         StdioFs {
-            fs: Mutex::new(BTreeMap::new()),
+            fs: Arc::new(Mutex::new(BTreeMap::new())),
         }
+    }
+
+    /// Creates the stdio entries for a new process
+    pub fn create_proc(&self, pid: u32) {
+        self.fs.lock().insert(pid, Arc::new(Stdio::new()));
+    }
+
+    /// Removes the stdio entries for a finished process
+    pub fn remove_proc(&self, pid: u32) {
+        self.fs.lock().remove(&pid);
     }
 }
 
+/// Holds the stdin and stdout buffers for a single process
 #[derive(Debug)]
 pub struct Stdio {
     stdout: Mutex<VecDeque<u8>>,
@@ -165,55 +183,52 @@ impl Default for Stdio {
 
 impl Stdio {
     pub fn new() -> Self {
-        // fix me - mutexes
         Stdio {
             stdout: Mutex::new(VecDeque::new()),
             stdin: Mutex::new(VecDeque::new()),
         }
     }
 
-    pub fn write_stdin(&self, buf: &[u8]) {
-        for i in buf {
-            self.stdin.lock().push_back(*i);
+    pub fn write_stdin(&self, buf: &[u8]) -> usize {
+        let mut stdin_lock = self.stdin.lock();
+        for &byte in buf {
+            stdin_lock.push_back(byte);
         }
+        buf.len()
     }
 
-    pub fn write_stdout(&self, buf: &[u8]) {
-        for i in buf {
-            self.stdout.lock().push_back(*i);
+    pub fn write_stdout(&self, buf: &[u8]) -> usize {
+        let mut stdout_lock = self.stdout.lock();
+        for &byte in buf {
+            stdout_lock.push_back(byte);
         }
+        buf.len()
     }
 
-    pub fn read_stdin(&self, buf: &mut [u8]) -> isize {
+    pub fn read_stdin(&self, buf: &mut [u8]) -> usize {
+        let mut stdin_lock = self.stdin.lock();
         let mut len_read = 0;
-        for item in buf {
-            *item = {
-                let data = self.stdin.lock().pop_front();
-                match data {
-                    Some(x) => {
-                        len_read = len_read + 1;
-                        x
-                    }
-                    None => 0,
-                }
-            };
+        while len_read < buf.len() {
+            if let Some(byte) = stdin_lock.pop_front() {
+                buf[len_read] = byte;
+                len_read += 1;
+            } else {
+                break; // No more data to read
+            }
         }
         len_read
     }
 
-    pub fn read_stdout(&self, buf: &mut [u8]) -> isize {
+    pub fn read_stdout(&self, buf: &mut [u8]) -> usize {
+        let mut stdout_lock = self.stdout.lock();
         let mut len_read = 0;
-        for item in buf {
-            *item = {
-                let data = self.stdout.lock().pop_front();
-                match data {
-                    Some(x) => {
-                        len_read = len_read + 1;
-                        x
-                    }
-                    None => 0,
-                }
-            };
+        while len_read < buf.len() {
+            if let Some(byte) = stdout_lock.pop_front() {
+                buf[len_read] = byte;
+                len_read += 1;
+            } else {
+                break; // No more data to read
+            }
         }
         len_read
     }

@@ -173,7 +173,7 @@ fn handle_syscall(regs: &mut Context) {
 
             let fd = crate::fs::vfs::open(&filename).unwrap();
 
-            regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(&fd);
+            regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(fd);
 
             // println!("open {filename}");
         }
