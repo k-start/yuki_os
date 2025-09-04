@@ -44,9 +44,9 @@ pub fn init(boot_info: &'static mut BootInfo) {
     syscalls::init();
 
     // Load ram disk and mount relevant virtual filesystems into memory
-    // let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
-    // let initrd = unsafe { fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize) };
-    // fs::vfs::mount("initrd", initrd);
+    let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
+    let initrd = unsafe { fs::initrd::InitRdFs::new(ramdisk_addr, boot_info.ramdisk_len as usize) };
+    fs::vfs::mount("/initrd", Arc::new(initrd));
 
     // let stdiofs = StdioFs::new();
     // fs::vfs::mount("stdio", stdiofs);
@@ -61,20 +61,20 @@ pub fn init(boot_info: &'static mut BootInfo) {
 
     // println!("{:?}", fs::vfs::list_dir("/framebuffer"));
 
-    let device = fs::fat32ata::Fat32Ata::new(0);
-    let fs = fs::fatfs::FatFs::new(device).unwrap();
+    // let device = fs::fat32ata::Fat32Ata::new(0);
+    // let fs = fs::fatfs::FatFs::new(device).unwrap();
 
-    vfs::mount("a:", Arc::new(fs));
+    // vfs::mount("a:", Arc::new(fs));
 
     // // fs::vfs::mount(fs);
     // // let file = fs::vfs::open("a:/test-binary").unwrap();
 
-    // // load  memory manager application and schedule it
-    // let file2 = fs::vfs::open("/initrd/hello-world").unwrap();
+    // load  memory manager application and schedule it
+    let file2 = fs::vfs::open("/initrd/hello-world").unwrap();
 
-    // let sched = &scheduler::SCHEDULER.read();
-    // // sched.schedule(file);
-    // sched.schedule(file2);
+    let sched = &scheduler::SCHEDULER.read();
+    // sched.schedule(file);
+    sched.schedule(file2);
 
     // println!("{:?}", fs::vfs::list_dir("/stdio/1"));
 

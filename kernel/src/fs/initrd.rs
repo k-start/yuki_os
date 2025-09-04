@@ -1,7 +1,7 @@
 use crate::fs::{
     error::FsError,
     filesystem::Filesystem,
-    inode::{Inode, InodeKind, InodeRef},
+    inode::{DirEntry, Inode, InodeKind, InodeRef},
 };
 use alloc::{
     string::{String, ToString},
@@ -123,41 +123,39 @@ impl Inode for InitRdInode {
         Err(FsError::ReadOnly)
     }
 
-    fn size(&self) -> u64 {
-        todo!()
+    fn list_entries(&self) -> Result<Vec<DirEntry>, FsError> {
+        if self.kind() != InodeKind::Directory {
+            return Err(FsError::NotADirectory);
+        }
+
+        let mut entries = Vec::new();
+        let file_count = self.fs.file_count();
+        let data_start = self.fs.data_section_start();
+
+        for i in 0..file_count {
+            let header = self.fs.get_header(i).ok_or(FsError::InvalidPath)?;
+
+            let name = core::str::from_utf8(&header.filename)
+                .map_err(|_| FsError::InvalidPath)?
+                .trim_matches('\0');
+
+            let inode: InodeRef = Arc::new(InitRdInode {
+                fs: self.fs.clone(),
+                kind: InodeKind::File,
+                size: header.size,
+                data_offset: data_start as u64 + header.offset,
+            });
+
+            entries.push(DirEntry {
+                name: name.to_string(),
+                inode,
+            });
+        }
+
+        Ok(entries)
     }
 
-    // fn list_entries(&self) -> Result<Vec<DirEntry>, FsError> {
-    //     if self.kind() != InodeKind::Directory {
-    //         return Err(FsError::NotADirectory);
-    //     }
-
-    //     let mut entries = Vec::new();
-    //     let file_count = self.fs.file_count();
-    //     let data_start = self.fs.data_section_start();
-
-    //     for i in 0..file_count {
-    //         let header = self.fs.get_header(i).ok_or(FsError::Implementation(
-    //             "Failed to read initrd header".to_string(),
-    //         ))?;
-
-    //         let name = core::str::from_utf8(&header.filename)
-    //             .map_err(|_| FsError::Implementation("Invalid UTF-8 in filename".to_string()))?
-    //             .trim_matches('\0');
-
-    //         let inode: InodeRef = Arc::new(InitRdInode {
-    //             fs: self.fs.clone(),
-    //             kind: InodeKind::File,
-    //             size: header.size,
-    //             data_offset: data_start as u64 + header.offset,
-    //         });
-
-    //         entries.push(DirEntry {
-    //             name: name.to_string(),
-    //             inode,
-    //         });
-    //     }
-
-    //     Ok(entries)
-    // }
+    fn size(&self) -> u64 {
+        self.size
+    }
 }

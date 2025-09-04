@@ -83,6 +83,8 @@ fn resolve_path(path_str: &str) -> Result<InodeRef, FsError> {
         .find_fs(path_str)
         .ok_or(FsError::MountPointNotFound)?;
 
+    println!("{:?} - {}", mount.path, subpath);
+
     let mut current_inode = mount.fs.root()?;
 
     // Traverse the path components

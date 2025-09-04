@@ -58,7 +58,7 @@ impl Scheduler {
         self.get_available_pid_unlocked(&allocated)
     }
 
-    pub fn schedule(&self, file: FileDescriptor) {
+    pub fn schedule(&self, file: Arc<FileDescriptor>) {
         let (_current_page_table_ptr, current_page_table_physaddr) = memory::active_page_table();
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
