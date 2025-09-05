@@ -1,3 +1,5 @@
+use core::sync::atomic::AtomicU64;
+
 use spin::Mutex;
 
 use crate::fs::inode::InodeRef;
@@ -7,5 +9,5 @@ use crate::fs::inode::InodeRef;
 /// This should probably be moved to a more central file like `fs/file.rs`.
 pub struct FileDescriptor {
     pub inode: InodeRef,
-    pub offset: Mutex<u64>,
+    pub offset: AtomicU64,
 }
