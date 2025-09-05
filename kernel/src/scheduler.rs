@@ -327,7 +327,7 @@ impl Scheduler {
         let file_buf: &mut [u8] = unsafe {
             core::slice::from_raw_parts_mut(temp_elf_addr.as_mut_ptr(), temp_elf_size as usize)
         };
-        vfs::read(file, file_buf).map_err(|_| "Failed to read ELF file")?;
+        file.read(file_buf).map_err(|_| "Failed to read ELF file")?;
 
         // Parse and load the ELF binary
         let binary = ElfBinary::new(file_buf).map_err(|_| "Failed to parse ELF file")?;
@@ -378,19 +378,17 @@ impl Scheduler {
     pub fn push_stdin(&self, key: u8) {
         let processes = self.processes.read();
         // for i in 0..processes.len() {
-        let _ = vfs::write(processes[0].file_descriptors.get(&0).unwrap(), &[key]);
+        let _ = processes[0].file_descriptors.get(&0).unwrap().write(&[key]);
         // }
     }
 
     pub fn write_file_descriptor(&self, id: u32, buf: &[u8]) {
         self.cur_process.read().map(|cur_process_idx| {
-            let _ = vfs::write(
-                self.processes.read()[cur_process_idx]
-                    .file_descriptors
-                    .get(&id)
-                    .unwrap(),
-                buf,
-            );
+            let _ = self.processes.read()[cur_process_idx]
+                .file_descriptors
+                .get(&id)
+                .unwrap()
+                .write(buf);
         });
     }
 
@@ -398,14 +396,12 @@ impl Scheduler {
         self.cur_process
             .read()
             .map(|cur_process_idx| {
-                vfs::read(
-                    self.processes.read()[cur_process_idx]
-                        .file_descriptors
-                        .get(&id)
-                        .unwrap(),
-                    buf,
-                )
-                .unwrap_or(0)
+                self.processes.read()[cur_process_idx]
+                    .file_descriptors
+                    .get(&id)
+                    .unwrap()
+                    .read(buf)
+                    .unwrap_or(0)
             })
             .unwrap_or(0)
     }

@@ -121,27 +121,3 @@ pub fn open(path: &str) -> Result<Arc<File>, FsError> {
         offset: 0.into(),
     }))
 }
-
-/// Reads from an open file descriptor, advancing its offset
-pub fn read(fd: &File, buf: &mut [u8]) -> Result<usize, FsError> {
-    let pos = fd.offset.load(Ordering::Relaxed);
-    let bytes_read = fd.inode.read_at(pos, buf)?;
-
-    if bytes_read > 0 {
-        fd.offset.fetch_add(bytes_read as u64, Ordering::Relaxed);
-    }
-
-    Ok(bytes_read)
-}
-
-/// Writes to an open file descriptor, advancing its offset
-pub fn write(fd: &File, buf: &[u8]) -> Result<usize, FsError> {
-    let pos = fd.offset.load(Ordering::Relaxed);
-    let bytes_written = fd.inode.write_at(pos, buf)?;
-
-    if bytes_written > 0 {
-        fd.offset.fetch_add(bytes_written as u64, Ordering::Relaxed);
-    }
-
-    Ok(bytes_written)
-}

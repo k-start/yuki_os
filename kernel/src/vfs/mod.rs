@@ -2,7 +2,7 @@
 pub use self::error::FsError;
 pub use self::file::File;
 pub use self::inode::{DirEntry, Inode, InodeKind, InodeRef};
-pub use self::mount::{mount, open, read, write, Filesystem, FilesystemRef, MountTable};
+pub use self::mount::{mount, open, Filesystem, FilesystemRef, MountTable};
 
 mod error;
 mod file;
