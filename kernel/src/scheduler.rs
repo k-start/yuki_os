@@ -1,8 +1,7 @@
 use crate::{
-    elf,
-    fs::{self, file::FileDescriptor},
-    gdt, memory,
+    elf, gdt, memory,
     process::{Context, Process, ProcessState},
+    vfs::{self, File},
 };
 use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use elfloader::ElfBinary;
@@ -58,7 +57,7 @@ impl Scheduler {
         self.get_available_pid_unlocked(&allocated)
     }
 
-    pub fn schedule(&self, file: Arc<FileDescriptor>) {
+    pub fn schedule(&self, file: Arc<File>) {
         let (_current_page_table_ptr, current_page_table_physaddr) = memory::active_page_table();
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
@@ -279,7 +278,7 @@ impl Scheduler {
     // rather than creating a new process and executing on that
     pub fn exec(&self, context: &mut Context, filename: String) -> usize {
         println!("{:?}", filename);
-        let file = fs::vfs::open(&filename).unwrap();
+        let file = vfs::open(&filename).unwrap();
 
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
@@ -306,7 +305,7 @@ impl Scheduler {
     /// This function assumes that the provided `user_page_table_ptr` is active.
     fn load_elf(
         &self,
-        file: &FileDescriptor,
+        file: &File,
         user_page_table_ptr: *mut PageTable,
     ) -> Result<u64, &'static str> {
         // Allocate a temporary buffer to read the ELF file into.
@@ -328,7 +327,7 @@ impl Scheduler {
         let file_buf: &mut [u8] = unsafe {
             core::slice::from_raw_parts_mut(temp_elf_addr.as_mut_ptr(), temp_elf_size as usize)
         };
-        fs::vfs::read(file, file_buf).map_err(|_| "Failed to read ELF file")?;
+        vfs::read(file, file_buf).map_err(|_| "Failed to read ELF file")?;
 
         // Parse and load the ELF binary
         let binary = ElfBinary::new(file_buf).map_err(|_| "Failed to parse ELF file")?;
@@ -379,13 +378,13 @@ impl Scheduler {
     pub fn push_stdin(&self, key: u8) {
         let processes = self.processes.read();
         // for i in 0..processes.len() {
-        let _ = fs::vfs::write(processes[0].file_descriptors.get(&0).unwrap(), &[key]);
+        let _ = vfs::write(processes[0].file_descriptors.get(&0).unwrap(), &[key]);
         // }
     }
 
     pub fn write_file_descriptor(&self, id: u32, buf: &[u8]) {
         self.cur_process.read().map(|cur_process_idx| {
-            let _ = fs::vfs::write(
+            let _ = vfs::write(
                 self.processes.read()[cur_process_idx]
                     .file_descriptors
                     .get(&id)
@@ -399,7 +398,7 @@ impl Scheduler {
         self.cur_process
             .read()
             .map(|cur_process_idx| {
-                fs::vfs::read(
+                vfs::read(
                     self.processes.read()[cur_process_idx]
                         .file_descriptors
                         .get(&id)
@@ -411,7 +410,7 @@ impl Scheduler {
             .unwrap_or(0)
     }
 
-    pub fn add_file_descriptor(&self, fd: Arc<FileDescriptor>) -> usize {
+    pub fn add_file_descriptor(&self, fd: Arc<File>) -> usize {
         self.cur_process
             .read()
             .map(|cur_process_idx| {

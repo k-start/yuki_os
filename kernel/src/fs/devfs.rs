@@ -1,13 +1,10 @@
+use crate::fs::framebuffer::FramebufferDevice;
+use crate::vfs::{Filesystem, FsError, Inode, InodeKind, InodeRef};
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bootloader_api::info::FrameBuffer;
-
-use crate::fs::error::FsError;
-use crate::fs::filesystem::Filesystem;
-use crate::fs::framebuffer::FramebufferDevice;
-use crate::fs::inode::{Inode, InodeKind, InodeRef};
 
 // DevFs is the filesystem for virtual device files
 #[derive(Clone)]

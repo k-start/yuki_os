@@ -2,7 +2,7 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use crate::fs::error::FsError;
+use crate::vfs::error::FsError;
 
 // An enum to represent the type of the inode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

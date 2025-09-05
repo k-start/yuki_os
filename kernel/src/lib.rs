@@ -4,10 +4,7 @@
 #![feature(naked_functions)]
 #![feature(asm_const)]
 
-use crate::fs::{
-    stdio::StdioFs,
-    vfs::{self, MountTable},
-};
+use crate::fs::stdio::StdioFs;
 use alloc::sync::Arc;
 use bootloader_api::BootInfo;
 use fs::devfs::DevFs;
@@ -28,6 +25,7 @@ pub mod mouse;
 pub mod process;
 pub mod scheduler;
 pub mod syscalls;
+pub mod vfs;
 
 extern crate alloc;
 
@@ -46,7 +44,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
     // Load ram disk and mount relevant virtual filesystems into memory
     let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
     let initrd = unsafe { fs::initrd::InitRdFs::new(ramdisk_addr, boot_info.ramdisk_len as usize) };
-    fs::vfs::mount("/initrd", Arc::new(initrd));
+    vfs::mount("/initrd", Arc::new(initrd));
 
     // let stdiofs = StdioFs::new();
     // fs::vfs::mount("stdio", stdiofs);
@@ -70,7 +68,7 @@ pub fn init(boot_info: &'static mut BootInfo) {
     // // let file = fs::vfs::open("a:/test-binary").unwrap();
 
     // load  memory manager application and schedule it
-    let file2 = fs::vfs::open("/initrd/hello-world").unwrap();
+    let file2 = vfs::open("/initrd/hello-world").unwrap();
 
     let sched = &scheduler::SCHEDULER.read();
     // sched.schedule(file);

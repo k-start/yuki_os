@@ -1,9 +1,5 @@
 // Filesystem for storing STDIO for applications
-use super::{
-    error::FsError,
-    filesystem::Filesystem,
-    inode::{Inode, InodeKind, InodeRef},
-};
+use crate::vfs::{Filesystem, FsError, Inode, InodeKind, InodeRef};
 use alloc::{
     collections::{BTreeMap, VecDeque},
     format,

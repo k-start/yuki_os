@@ -1,7 +1,4 @@
-use crate::{
-    fs::{self, file::FileDescriptor},
-    scheduler,
-};
+use crate::{scheduler, vfs::File};
 use alloc::{collections::BTreeMap, format, sync::Arc};
 use core::fmt::Display;
 use x86_64::{PhysAddr, VirtAddr};
@@ -18,7 +15,7 @@ pub struct Process {
     pub process_id: usize,
     pub state: ProcessState,       // the current state of the process
     pub page_table_phys: PhysAddr, // the page table for this process
-    pub file_descriptors: BTreeMap<u32, Arc<FileDescriptor>>, // file descriptors for Stdio
+    pub file_descriptors: BTreeMap<u32, Arc<File>>, // file descriptors for Stdio
 }
 
 impl Process {

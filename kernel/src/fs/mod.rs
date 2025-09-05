@@ -1,11 +1,6 @@
 pub mod devfs;
-pub mod error;
 pub mod fat32ata;
 pub mod fatfs;
-pub mod file;
-pub mod filesystem;
 pub mod framebuffer;
 pub mod initrd;
-pub mod inode;
 pub mod stdio;
-pub mod vfs;

@@ -1,3 +1,4 @@
+use crate::vfs::{Filesystem, FsError, Inode, InodeKind, InodeRef};
 use alloc::{
     format,
     string::{String, ToString},
@@ -5,12 +6,6 @@ use alloc::{
 };
 use fatfs::{FileSystem, LossyOemCpConverter, NullTimeProvider, Read, Seek, SeekFrom, Write};
 use spin::Mutex;
-
-use crate::fs::{
-    error::FsError,
-    filesystem::Filesystem,
-    inode::{Inode, InodeKind, InodeRef},
-};
 
 /// A wrapper for the `fatfs` filesystem to implement the VFS `Filesystem` trait.
 /// It can be cloned to get multiple references to the same underlying filesystem.

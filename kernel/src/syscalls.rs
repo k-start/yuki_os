@@ -3,7 +3,7 @@ use core::{arch::asm, ffi::CStr};
 use alloc::borrow::ToOwned;
 use x86_64::VirtAddr;
 
-use crate::{process::Context, scheduler};
+use crate::{process::Context, scheduler, vfs};
 
 const MSR_STAR: usize = 0xc0000081;
 const MSR_LSTAR: usize = 0xc0000082;
@@ -171,7 +171,7 @@ fn handle_syscall(regs: &mut Context) {
                 .unwrap()
                 .to_owned();
 
-            let fd = crate::fs::vfs::open(&filename).unwrap();
+            let fd = vfs::open(&filename).unwrap();
 
             regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(fd);
 

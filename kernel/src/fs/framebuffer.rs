@@ -1,7 +1,4 @@
-use crate::fs::{
-    error::FsError,
-    inode::{Inode, InodeKind},
-};
+use crate::vfs::{Filesystem, FsError, Inode, InodeKind, InodeRef};
 use alloc::string::ToString;
 use bootloader_api::info::FrameBuffer;
 

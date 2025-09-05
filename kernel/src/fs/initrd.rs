@@ -1,8 +1,4 @@
-use crate::fs::{
-    error::FsError,
-    filesystem::Filesystem,
-    inode::{DirEntry, Inode, InodeKind, InodeRef},
-};
+use crate::vfs::{DirEntry, Filesystem, FsError, Inode, InodeKind, InodeRef};
 use alloc::{
     string::{String, ToString},
     sync::Arc,

@@ -1,9 +1,8 @@
 use core::sync::atomic::Ordering;
 
-use crate::fs::{
+use crate::vfs::{
     error::FsError,
-    file::FileDescriptor,
-    filesystem::FilesystemRef,
+    file::File,
     inode::{Inode, InodeRef},
 };
 use alloc::string::String;
@@ -17,11 +16,24 @@ lazy_static! {
     static ref MOUNT_TABLE: Mutex<MountTable> = Mutex::new(MountTable::new());
 }
 
+// Filesystem trait
+pub trait Filesystem: Send + Sync {
+    /// Returns the root inode for this filesystem.
+    fn root(&self) -> Result<InodeRef, FsError>;
+
+    // You could add other filesystem-wide operations here, like `sync`.
+    // fn sync(&self) -> Result<(), FsError>;
+}
+
+pub type FilesystemRef = Arc<dyn Filesystem>;
+
+// Mounted filesystem
 struct Mount {
     path: String,
     fs: FilesystemRef,
 }
 
+// Mounttable is our VFS
 pub struct MountTable {
     // A simple list of mounts. For performance, a tree or hash map is better.
     mounts: Vec<Mount>,
@@ -102,16 +114,16 @@ fn resolve_path(path_str: &str) -> Result<InodeRef, FsError> {
 
 /// Opens a file by path and returns a file descriptor
 /// This is the primary "open" syscall implementation
-pub fn open(path: &str) -> Result<Arc<FileDescriptor>, FsError> {
+pub fn open(path: &str) -> Result<Arc<File>, FsError> {
     let inode = resolve_path(path)?;
-    Ok(Arc::new(FileDescriptor {
+    Ok(Arc::new(File {
         inode,
         offset: 0.into(),
     }))
 }
 
 /// Reads from an open file descriptor, advancing its offset
-pub fn read(fd: &FileDescriptor, buf: &mut [u8]) -> Result<usize, FsError> {
+pub fn read(fd: &File, buf: &mut [u8]) -> Result<usize, FsError> {
     let pos = fd.offset.load(Ordering::Relaxed);
     let bytes_read = fd.inode.read_at(pos, buf)?;
 
@@ -123,7 +135,7 @@ pub fn read(fd: &FileDescriptor, buf: &mut [u8]) -> Result<usize, FsError> {
 }
 
 /// Writes to an open file descriptor, advancing its offset
-pub fn write(fd: &FileDescriptor, buf: &[u8]) -> Result<usize, FsError> {
+pub fn write(fd: &File, buf: &[u8]) -> Result<usize, FsError> {
     let pos = fd.offset.load(Ordering::Relaxed);
     let bytes_written = fd.inode.write_at(pos, buf)?;
 
