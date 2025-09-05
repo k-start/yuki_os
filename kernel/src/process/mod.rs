@@ -1,6 +1,10 @@
-use crate::{scheduler, vfs::File};
+use crate::{
+    scheduler,
+    vfs::{File, FileDescriptorTable},
+};
 use alloc::{collections::BTreeMap, format, sync::Arc};
 use core::fmt::Display;
+use spin::Mutex;
 use x86_64::{PhysAddr, VirtAddr};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -15,7 +19,7 @@ pub struct Process {
     pub process_id: usize,
     pub state: ProcessState,       // the current state of the process
     pub page_table_phys: PhysAddr, // the page table for this process
-    pub file_descriptors: BTreeMap<u32, Arc<File>>, // file descriptors for Stdio
+    pub files: Arc<Mutex<FileDescriptorTable>>,
 }
 
 impl Process {
@@ -31,7 +35,7 @@ impl Process {
             parent_id
         };
 
-        let mut file_descriptors = BTreeMap::new();
+        let mut files = FileDescriptorTable::new();
         // For a new process, create file descriptors for stdin and stdout
         // These will point to the stdio virtual filesystem
         // if let Ok(stdin) = fs::vfs::open(&format!("/stdio/{id}/stdin")) {
@@ -49,7 +53,7 @@ impl Process {
             process_id: id,
             state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
-            file_descriptors,
+            files: Arc::new(Mutex::new(files)),
         }
     }
 }

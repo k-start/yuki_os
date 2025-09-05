@@ -264,7 +264,7 @@ impl Scheduler {
                     process_id: pid,
                     state: ProcessState::SavedContext(ctx),
                     page_table_phys: current_page_table_physaddr, // Use same address space
-                    file_descriptors: cur_process.file_descriptors.clone(),
+                    files: cur_process.files.clone(),
                 };
                 processes.push(Box::new(child_process));
                 return pid;
@@ -378,15 +378,16 @@ impl Scheduler {
     pub fn push_stdin(&self, key: u8) {
         let processes = self.processes.read();
         // for i in 0..processes.len() {
-        let _ = processes[0].file_descriptors.get(&0).unwrap().write(&[key]);
+        let _ = processes[0].files.lock().get(0).unwrap().write(&[key]);
         // }
     }
 
     pub fn write_file_descriptor(&self, id: u32, buf: &[u8]) {
         self.cur_process.read().map(|cur_process_idx| {
             let _ = self.processes.read()[cur_process_idx]
-                .file_descriptors
-                .get(&id)
+                .files
+                .lock()
+                .get(id as usize)
                 .unwrap()
                 .write(buf);
         });
@@ -397,8 +398,9 @@ impl Scheduler {
             .read()
             .map(|cur_process_idx| {
                 self.processes.read()[cur_process_idx]
-                    .file_descriptors
-                    .get(&id)
+                    .files
+                    .lock()
+                    .get(id as usize)
                     .unwrap()
                     .read(buf)
                     .unwrap_or(0)
@@ -409,15 +411,7 @@ impl Scheduler {
     pub fn add_file_descriptor(&self, fd: Arc<File>) -> usize {
         self.cur_process
             .read()
-            .map(|cur_process_idx| {
-                let fd_idx: usize = self.processes.read()[cur_process_idx]
-                    .file_descriptors
-                    .len();
-                self.processes.write()[cur_process_idx]
-                    .file_descriptors
-                    .insert(fd_idx as u32, fd);
-                fd_idx
-            })
+            .map(|cur_process_idx| self.processes.write()[cur_process_idx].files.lock().add(fd))
             .unwrap()
     }
 

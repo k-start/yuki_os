@@ -1,5 +1,6 @@
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
+use alloc::{collections::btree_map::BTreeMap, sync::Arc};
 use spin::Mutex;
 
 use crate::vfs::{inode::InodeRef, FsError};
@@ -32,5 +33,46 @@ impl File {
         }
 
         Ok(bytes_written)
+    }
+}
+
+pub struct FileDescriptorTable {
+    /// The map from the file descriptor number (usize) to the File object.
+    files: BTreeMap<usize, Arc<File>>,
+
+    /// The next available file descriptor number to try.
+    next_fd: AtomicUsize,
+}
+
+impl FileDescriptorTable {
+    pub fn new() -> Self {
+        Self {
+            files: BTreeMap::new(),
+            next_fd: AtomicUsize::new(0),
+        }
+    }
+
+    /// Creates a new entry in the table for the given File object.
+    pub fn add(&mut self, file: Arc<File>) -> usize {
+        // Find the next available file descriptor ID
+        let mut fd = self.next_fd.load(Ordering::Relaxed);
+        while self.files.contains_key(&fd) {
+            fd += 1;
+        }
+        self.next_fd.store(fd + 1, Ordering::Relaxed);
+
+        // Add the file to the table
+        self.files.insert(fd, file);
+        fd // Return the new file descriptor number
+    }
+
+    /// Removes a file descriptor from the table.
+    pub fn remove(&mut self, fd: usize) -> Option<Arc<File>> {
+        self.files.remove(&fd)
+    }
+
+    /// Gets a reference to a File object from a descriptor ID.
+    pub fn get(&self, fd: usize) -> Option<Arc<File>> {
+        self.files.get(&fd).cloned() // Clone the Arc, not the File
     }
 }

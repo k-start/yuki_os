@@ -1,5 +1,5 @@
 use crate::fs::framebuffer::FramebufferDevice;
-use crate::vfs::{Filesystem, FsError, Inode, InodeKind, InodeRef};
+use crate::vfs::{DirEntry, Filesystem, FsError, Inode, InodeKind, InodeRef};
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
@@ -59,15 +59,15 @@ impl Inode for DevFsRootInode {
         todo!()
     }
 
-    // fn list_entries(&self) -> Result<Vec<DirEntry>, FsError> {
-    //     let entries = self
-    //         .devices
-    //         .iter()
-    //         .map(|(name, inode)| DirEntry {
-    //             name: name.clone(),
-    //             inode: inode.clone(),
-    //         })
-    //         .collect();
-    //     Ok(entries)
-    // }
+    fn list_entries(&self) -> Result<Vec<DirEntry>, FsError> {
+        let entries = self
+            .devices
+            .iter()
+            .map(|(name, inode)| DirEntry {
+                name: name.clone(),
+                inode: inode.clone(),
+            })
+            .collect();
+        Ok(entries)
+    }
 }

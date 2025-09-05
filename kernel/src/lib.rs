@@ -8,7 +8,6 @@ use crate::fs::stdio::StdioFs;
 use alloc::sync::Arc;
 use bootloader_api::BootInfo;
 use fs::devfs::DevFs;
-use spin::Mutex;
 
 #[macro_use]
 pub mod print;
