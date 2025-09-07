@@ -130,6 +130,33 @@ macro_rules! wrap {
 
 wrap!(handle_syscall => wrapped_syscall_handler);
 
+// #[repr(usize)]
+// pub enum SyscallNumber {
+//     Read = 0,
+//     Write = 1,
+//     Open = 2,
+//     Mmap = 9,
+//     Ioctl = 16,
+//     Getpid = 39,
+//     Fork = 57,
+//     Exec = 59,
+//     Exit = 60,
+// }
+
+type SyscallHandler = fn(regs: &Context) -> isize;
+
+// static SYSCALL_TABLE: [SyscallHandler; 1] = [
+//     syscall_read,
+//     // syscall_write,
+//     // syscall_open,
+//     // syscall_mmap,
+//     // syscall_ioctl,
+//     // syscall_getpid,
+//     // syscall_fork,
+//     // syscall_exec,
+//     // syscall_exit,
+// ];
+
 pub const READ: usize = 0;
 pub const WRITE: usize = 1;
 pub const OPEN: usize = 2;
@@ -142,101 +169,122 @@ pub const EXIT: usize = 60;
 
 // fn handle_syscall(stack_frame: &mut InterruptStackFrame, regs: &mut Context) {
 fn handle_syscall(regs: &mut Context) {
-    // println!("{:?}", regs);
+    let syscall_id = regs.rax;
 
-    match regs.rax {
-        READ => {
-            let buf: &mut [u8] =
-                unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
-            regs.rax = scheduler::SCHEDULER
-                .read()
-                .read_file_descriptor(regs.rdi as u32, buf) as usize;
-        }
-        WRITE => unsafe {
-            let slice: &[u8] =
-                core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx);
-            if regs.rdi == 1 {
-                let string = core::str::from_utf8(slice).unwrap();
-                print!("{string}");
-            } else {
-                scheduler::SCHEDULER
-                    .read()
-                    .write_file_descriptor(regs.rdi as u32, slice);
-            }
-            regs.rax = 0;
-        },
-        OPEN => {
-            let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
-                .to_str()
-                .unwrap()
-                .to_owned();
+    // Table jump code - will enable once syscalls are more fleshed out - we use a switch for now
+    // if syscall_id < SYSCALL_TABLE.len() {
+    //     let handler = SYSCALL_TABLE[syscall_id];
 
-            let fd = vfs::open(&filename).unwrap();
+    //     let result = handler(regs.rdi, regs.rsi, regs.rdx, regs.r10, regs.r8, regs.r9);
+    //     regs.rax = result as usize;
+    // } else {
+    //     regs.rax = -1isize as usize;
+    // }
 
-            regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(fd);
+    let result = match syscall_id {
+        READ => syscall_read(regs),
+        WRITE => syscall_write(regs),
+        OPEN => syscall_open(regs),
+        MMAP => syscall_mmap(regs),
+        IOCTL => syscall_ioctl(regs),
+        GET_PID => syscall_getpid(regs),
+        FORK => syscall_fork(regs),
+        EXEC => syscall_exec(regs),
+        EXIT => syscall_exit(regs),
+        _ => -1isize as isize,
+    };
 
-            // println!("open {filename}");
-        }
-        MMAP => {
-            // FIX ME - actually map properly, create usermode mapper
-            let _fd = regs.r8;
+    regs.rax = result as usize;
+}
 
-            let memory_info = unsafe { crate::memory::MEMORY_INFO.as_mut().unwrap() };
+fn syscall_read(regs: &Context) -> isize {
+    let buf: &mut [u8] = unsafe { core::slice::from_raw_parts_mut(regs.rsi as *mut u8, regs.rdx) };
 
-            let phys_addr = crate::memory::translate_addr(
-                VirtAddr::new(0x18000000000),
-                memory_info.phys_mem_offset,
-            )
+    scheduler::SCHEDULER
+        .read()
+        .read_file_descriptor(regs.rdi as u32, buf) as isize
+}
+
+fn syscall_write(regs: &Context) -> isize {
+    let slice: &[u8] =
+        unsafe { core::slice::from_raw_parts(VirtAddr::new(regs.rsi as u64).as_ptr(), regs.rdx) };
+    if regs.rdi == 1 {
+        let string = core::str::from_utf8(slice).unwrap();
+        print!("{string}");
+    } else {
+        scheduler::SCHEDULER
+            .read()
+            .write_file_descriptor(regs.rdi as u32, slice);
+    }
+    0
+}
+
+fn syscall_open(regs: &Context) -> isize {
+    let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
+        .to_str()
+        .unwrap()
+        .to_owned();
+
+    let fd = vfs::open(&filename).unwrap();
+
+    scheduler::SCHEDULER.read().add_file_descriptor(fd) as isize
+}
+
+fn syscall_mmap(regs: &Context) -> isize {
+    // FIX ME - actually map properly, create usermode mapper
+    let _fd = regs.r8;
+
+    let memory_info = unsafe { crate::memory::MEMORY_INFO.as_mut().unwrap() };
+
+    let phys_addr =
+        crate::memory::translate_addr(VirtAddr::new(0x18000000000), memory_info.phys_mem_offset)
             .unwrap();
 
-            crate::memory::map_physical_address_to_user(
-                VirtAddr::new(0x400000000000),
-                phys_addr,
-                regs.rsi,
-            );
+    crate::memory::map_physical_address_to_user(VirtAddr::new(0x400000000000), phys_addr, regs.rsi);
 
-            regs.rax = 0x400000000000;
-        }
-        IOCTL => {
-            // FIX ME - expand to actually check arguments rather than just assume we are getting
-            // framebuffer info
-            scheduler::SCHEDULER.read().ioctl(
-                regs.rdi as usize,
-                regs.rsi as u32,
-                regs.rdx as usize,
-            );
-            // look at return values
-        }
-        GET_PID => {
-            regs.rax = scheduler::SCHEDULER.read().get_cur_pid();
-        }
-        FORK => {
-            println!(
-                "[Kernel] Forking PID: {}",
-                scheduler::SCHEDULER.read().get_cur_pid()
-            );
-            regs.rax = scheduler::SCHEDULER.read().fork_current(regs.clone());
-        }
-        EXEC => {
-            let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
-                .to_str()
-                .unwrap()
-                .to_owned();
-            regs.rax = scheduler::SCHEDULER.read().exec(regs, filename);
-        }
-        EXIT => {
-            // Mark the current process as exiting.
-            scheduler::SCHEDULER.read().exit_current();
+    0x400000000000
+}
 
-            // This process must not run anymore. We force a context switch
-            // by triggering a Timer interrupt which runs our context switching
-            // logic
-            unsafe {
-                asm!("int 32", options(nomem, nostack));
-            }
+fn syscall_ioctl(regs: &Context) -> isize {
+    // FIX ME - expand to actually check arguments rather than just assume we are getting
+    // framebuffer info
+    scheduler::SCHEDULER
+        .read()
+        .ioctl(regs.rdi as usize, regs.rsi as u32, regs.rdx as usize);
+    // look at return values
+    0
+}
 
-            unreachable!();
-        }
-        _ => {}
+fn syscall_getpid(_regs: &Context) -> isize {
+    scheduler::SCHEDULER.read().get_cur_pid() as isize
+}
+
+fn syscall_fork(regs: &Context) -> isize {
+    println!(
+        "[Kernel] Forking PID: {}",
+        scheduler::SCHEDULER.read().get_cur_pid()
+    );
+    scheduler::SCHEDULER.read().fork_current(regs.clone()) as isize
+}
+
+fn syscall_exec(regs: &mut Context) -> isize {
+    let filename = unsafe { CStr::from_ptr(VirtAddr::new(regs.rdi as u64).as_ptr()) }
+        .to_str()
+        .unwrap()
+        .to_owned();
+    scheduler::SCHEDULER.read().exec(regs, filename) as isize
+}
+
+fn syscall_exit(_regs: &mut Context) -> isize {
+    // Mark the current process as exiting.
+    scheduler::SCHEDULER.read().exit_current();
+
+    // This process must not run anymore. We force a context switch
+    // by triggering a Timer interrupt which runs our context switching
+    // logic
+    unsafe {
+        asm!("int 32", options(nomem, nostack));
     }
+
+    unreachable!();
 }
