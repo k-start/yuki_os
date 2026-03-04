@@ -4,10 +4,10 @@
 #![feature(naked_functions)]
 #![feature(asm_const)]
 
+use crate::fs::stdio::StdioFs;
+use alloc::sync::Arc;
 use bootloader_api::BootInfo;
 use fs::devfs::DevFs;
-
-use crate::fs::stdio::StdioFs;
 
 #[macro_use]
 pub mod print;
@@ -43,18 +43,18 @@ pub fn init(boot_info: &'static mut BootInfo) {
     // Load ram disk and mount relevant virtual filesystems into memory
     let ramdisk_addr = boot_info.ramdisk_addr.into_option().unwrap() as *const u8;
     let initrd = unsafe { fs::initrd::InitRd::new(ramdisk_addr, boot_info.ramdisk_len as usize) };
-    fs::vfs::mount("initrd", initrd);
+    fs::vfs::mount("initrd", Arc::new(initrd));
 
     let stdiofs = StdioFs::new();
-    fs::vfs::mount("stdio", stdiofs);
+    fs::vfs::mount("stdio", Arc::new(stdiofs));
 
     let devfs = DevFs::new();
-    fs::vfs::mount("dev", devfs);
+    fs::vfs::mount("dev", Arc::new(devfs));
     mouse::init_mouse();
 
     if let Some(framebuffer) = boot_info.framebuffer.as_mut() {
         let framebufferfs = fs::framebuffer::FrameBufferFs::new(framebuffer);
-        fs::vfs::mount("framebuffer", framebufferfs);
+        fs::vfs::mount("framebuffer", Arc::new(framebufferfs));
     }
 
     println!("{:?}", fs::vfs::list_dir("/framebuffer"));

@@ -1,96 +1,123 @@
-use crate::fs::filesystem::{Error, FileDescriptor, FileSystem};
-use alloc::borrow::ToOwned;
-use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
-use alloc::format;
+use crate::fs::errors::Error;
+use crate::fs::file::File;
+use crate::fs::vnode::VNode;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use spin::Mutex;
 
-static FS: Mutex<BTreeMap<String, Box<dyn FileSystem + Send>>> = Mutex::new(BTreeMap::new());
+pub struct Mount {
+    pub mountpoint: String,
+    pub root: Arc<dyn VNode>,
+}
+
+static FS: Mutex<Vec<Mount>> = Mutex::new(Vec::new());
 
 pub fn init() {}
 
-pub fn mount<T: FileSystem + Send + 'static>(mountpoint: &str, filesystem: T) {
+/// Canonicalizes a path by resolving `.` and `..` and removing redundant slashes
+/// Returns a path string that always starts with `/` unless the path is truly empty/invalid
+fn canonicalize_path(path: &str) -> String {
+    let mut components = Vec::new();
+
+    for part in path.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        } else if part == ".." {
+            components.pop();
+        } else {
+            components.push(part);
+        }
+    }
+
+    let mut result = String::from("/");
+    result.push_str(&components.join("/"));
+    result
+}
+
+pub fn mount(mountpoint: &str, filesystem: Arc<dyn VNode>) {
     let mut fs = FS.lock();
-    if mountpoint.contains('/') {
-        todo!("mountpoint cant contain a /")
+    let canonical = canonicalize_path(mountpoint);
+
+    // Check if already mounted
+    if fs.iter().any(|m| m.mountpoint == canonical) {
+        // fixme: Return error here if we want
+        // For now we don't really care
     }
-    fs.insert(mountpoint.to_owned(), Box::new(filesystem));
+
+    fs.push(Mount {
+        mountpoint: canonical,
+        root: filesystem,
+    });
+
+    // Sort by mountpoint length descending, so longest prefixes match first
+    // (e.g., /mnt/usb/ matches before /mnt/)
+    fs.sort_by(|a, b| b.mountpoint.len().cmp(&a.mountpoint.len()));
 }
 
-pub fn open(path: &str) -> Result<FileDescriptor, Error> {
-    let fs = FS.lock();
-    let mount_point = get_mount_point(path);
-    let path = remove_mount_point(path, mount_point);
+fn resolve_path(path: &str) -> (Option<Arc<dyn VNode>>, String) {
+    let canonical = canonicalize_path(path);
+    let mut canonical_slash = canonical.clone();
+    if !canonical_slash.ends_with('/') {
+        canonical_slash.push('/');
+    }
 
-    if let Some(device) = fs.get(mount_point) {
-        Ok(FileDescriptor {
-            file: device.open(&path)?,
-            device: mount_point.to_owned(),
-        })
+    let fs = FS.lock();
+    for mount in fs.iter() {
+        let mut mountpoint_slash = mount.mountpoint.clone();
+        if !mountpoint_slash.ends_with('/') {
+            mountpoint_slash.push('/');
+        }
+
+        if canonical_slash.starts_with(&mountpoint_slash) {
+            let remaining = &canonical[mount.mountpoint.len()..];
+            let remaining = remaining.trim_start_matches('/');
+            return (Some(mount.root.clone()), String::from(remaining));
+        }
+    }
+
+    (None, String::new())
+}
+
+pub fn open(path: &str) -> Result<Arc<Mutex<File>>, Error> {
+    let (vnode, remaining) = resolve_path(path);
+
+    if let Some(device) = vnode {
+        let final_vnode = if remaining.is_empty() {
+            device.clone()
+        } else {
+            device.lookup(&remaining)?
+        };
+        let file = File::new(final_vnode, true, true);
+        Ok(Arc::new(Mutex::new(file)))
     } else {
         Err(Error::DeviceDoesntExist)
     }
 }
 
-pub fn read(file: &FileDescriptor, buf: &mut [u8]) -> Result<isize, Error> {
-    let fs = FS.lock();
+pub fn read(file: &Arc<Mutex<File>>, buf: &mut [u8]) -> Result<isize, Error> {
+    file.lock().read(buf)
+}
 
-    if let Some(device) = fs.get(&file.device) {
-        device.read(&file.file, buf)
+pub fn write(file: &Arc<Mutex<File>>, buf: &[u8]) -> Result<(), Error> {
+    file.lock().write(buf)
+}
+
+pub fn ioctl(file: &Arc<Mutex<File>>, cmd: u32, args: usize) -> Result<(), Error> {
+    file.lock().ioctl(cmd, args)
+}
+
+pub fn list_dir(path: &str) -> Result<Vec<String>, Error> {
+    let (vnode, remaining) = resolve_path(path);
+
+    if let Some(device) = vnode {
+        let final_vnode = if remaining.is_empty() {
+            device.clone()
+        } else {
+            device.lookup(&remaining)?
+        };
+        final_vnode.dir_entries()
     } else {
         Err(Error::DeviceDoesntExist)
     }
-}
-
-pub fn write(file: &FileDescriptor, buf: &[u8]) -> Result<(), Error> {
-    let fs = FS.lock();
-
-    if let Some(device) = fs.get(&file.device) {
-        device.write(&file.file, buf)
-    } else {
-        Err(Error::DeviceDoesntExist)
-    }
-}
-
-pub fn ioctl(file: &FileDescriptor, cmd: u32, args: usize) -> Result<(), Error> {
-    let fs = FS.lock();
-
-    if let Some(device) = fs.get(&file.device) {
-        device.ioctl(&file.file, cmd, args)
-    } else {
-        Err(Error::DeviceDoesntExist)
-    }
-}
-
-pub fn list_dir(path: &str) -> Result<Vec<FileDescriptor>, Error> {
-    let fs = FS.lock();
-    let mount_point = get_mount_point(path);
-    let path = remove_mount_point(path, mount_point);
-
-    if let Some(device) = fs.get(mount_point) {
-        Ok(device
-            .dir_entries(&path)?
-            .iter()
-            .map(|f| FileDescriptor {
-                file: f.clone(),
-                device: mount_point.to_owned(),
-            })
-            .collect())
-    } else {
-        Err(Error::DeviceDoesntExist)
-    }
-}
-
-fn get_mount_point(path: &str) -> &str {
-    let split: Vec<&str> = path.split('/').collect();
-    let mount_point = *split.get(1).unwrap_or(&"");
-
-    mount_point
-}
-
-fn remove_mount_point(path: &str, mount_point: &str) -> String {
-    path.replace(&format!("/{mount_point}/"), "")
-        .replace(&format!("/{mount_point}"), "")
 }
