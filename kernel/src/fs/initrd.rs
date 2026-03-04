@@ -1,8 +1,12 @@
-use crate::fs::filesystem::{Error, File};
-use alloc::{borrow::ToOwned, vec::Vec};
+use crate::fs::errors::Error;
+use crate::fs::vnode::VNode;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
-pub struct InitRd<'a> {
-    data: &'a [u8],
+pub struct InitRd {
+    data: &'static [u8],
 }
 
 struct RdFile {
@@ -11,14 +15,9 @@ struct RdFile {
     offset: usize,
 }
 
-impl super::filesystem::FileSystem for InitRd<'_> {
-    fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error> {
-        if !dir.is_empty() {
-            return Err(Error::DirDoesntExist);
-        }
-
-        let mut ret: Vec<File> = Vec::new();
-
+impl VNode for InitRd {
+    fn dir_entries(&self) -> Result<Vec<String>, Error> {
+        let mut ret = Vec::new();
         let file_count = self.data[0];
 
         for i in 0..file_count {
@@ -34,26 +33,13 @@ impl super::filesystem::FileSystem for InitRd<'_> {
             let name = core::str::from_utf8(&rd_file.filename)
                 .unwrap()
                 .trim_matches(char::from(0));
-
-            ret.push(File {
-                name: name.to_owned(),
-                path: name.to_owned(),
-                r#type: "file".to_owned(),
-                size: rd_file.size as u64,
-                ptr: Some(unsafe {
-                    self.data.as_ptr().add(
-                        rd_file.offset as usize
-                            + file_count as usize * core::mem::size_of::<RdFile>()
-                            + 1,
-                    ) as u64
-                }),
-            })
+            ret.push(name.to_owned());
         }
 
         Ok(ret)
     }
 
-    fn open(&self, path: &str) -> Result<File, Error> {
+    fn lookup(&self, name: &str) -> Result<Arc<dyn VNode>, Error> {
         let file_count = self.data[0];
 
         for i in 0..file_count {
@@ -66,67 +52,71 @@ impl super::filesystem::FileSystem for InitRd<'_> {
                 )
             };
 
-            let name = core::str::from_utf8(&rd_file.filename)
+            let file_name = core::str::from_utf8(&rd_file.filename)
                 .unwrap()
                 .trim_matches(char::from(0));
-            if name == path {
-                return Ok(File {
-                    name: name.to_owned(),
-                    path: name.to_owned(),
-                    r#type: "file".to_owned(),
-                    size: rd_file.size as u64,
-                    ptr: Some(unsafe {
-                        self.data.as_ptr().add(
-                            rd_file.offset as usize
-                                + file_count as usize * core::mem::size_of::<RdFile>()
-                                + 1,
-                        ) as u64
-                    }),
-                });
+
+            if file_name == name {
+                let offset = rd_file.offset as usize
+                    + file_count as usize * core::mem::size_of::<RdFile>()
+                    + 1;
+
+                return Ok(Arc::new(InitRdNode {
+                    data: self.data,
+                    start: offset,
+                    size: rd_file.size,
+                }));
             }
         }
 
         Err(Error::FileDoesntExist)
     }
 
-    fn read(&self, file: &File, buffer: &mut [u8]) -> Result<isize, Error> {
-        let file_count = self.data[0];
-
-        for i in 0..file_count {
-            let rd_file: RdFile = unsafe {
-                core::ptr::read(
-                    self.data
-                        .as_ptr()
-                        .add((i as usize) * core::mem::size_of::<RdFile>() + 1)
-                        as *const _,
-                )
-            };
-
-            let name = core::str::from_utf8(&rd_file.filename)
-                .unwrap()
-                .trim_matches(char::from(0));
-
-            if name == file.name {
-                let offset = rd_file.offset as usize
-                    + file_count as usize * core::mem::size_of::<RdFile>()
-                    + 1;
-
-                buffer[..rd_file.size].copy_from_slice(&self.data[offset..(offset + rd_file.size)]);
-            }
-        }
-        Ok(0)
+    fn read(&self, _offset: usize, _buf: &mut [u8]) -> Result<isize, Error> {
+        Err(Error::ReadError)
     }
 
-    fn write(&self, _file: &File, _buf: &[u8]) -> Result<(), Error> {
-        panic!("Can't write to initrd")
+    fn write(&self, _offset: usize, _buf: &[u8]) -> Result<(), Error> {
+        Err(Error::IoError)
     }
 
-    fn ioctl(&self, _file: &File, _cmd: u32, _arg: usize) -> Result<(), Error> {
-        todo!()
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        Err(Error::IoError)
     }
 }
 
-impl InitRd<'_> {
+pub struct InitRdNode {
+    data: &'static [u8],
+    start: usize,
+    size: usize,
+}
+
+impl VNode for InitRdNode {
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    fn read(&self, offset: usize, buffer: &mut [u8]) -> Result<isize, Error> {
+        if offset >= self.size {
+            return Ok(0);
+        }
+        let available = self.size - offset;
+        let to_read = core::cmp::min(buffer.len(), available);
+        buffer[..to_read]
+            .copy_from_slice(&self.data[(self.start + offset)..(self.start + offset + to_read)]);
+        Ok(to_read as isize)
+    }
+
+    fn write(&self, _offset: usize, _buf: &[u8]) -> Result<(), Error> {
+        panic!("Can't write to initrd")
+    }
+
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        Err(Error::IoError)
+    }
+}
+
+impl InitRd {
     /// Initialize a new OffsetPageTable.
     ///
     /// # Safety
@@ -134,7 +124,7 @@ impl InitRd<'_> {
     /// This function is unsafe because it creates a slice from the pointer
     /// provided
     pub unsafe fn new(ptr: *const u8, len: usize) -> Self {
-        let slice: &[u8] = core::slice::from_raw_parts(ptr, len);
+        let slice: &'static [u8] = core::slice::from_raw_parts(ptr, len);
         InitRd { data: slice }
     }
 }

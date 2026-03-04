@@ -1,6 +1,11 @@
 // Filesystem for storing the framebuffer for applications to draw to the screen
-use super::filesystem::{Error, File};
-use alloc::{string::ToString, vec::Vec};
+use crate::fs::errors::Error;
+use crate::fs::vnode::VNode;
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
 use bootloader_api::info::FrameBuffer;
 
 #[derive(Debug, Clone, Copy)]
@@ -52,12 +57,13 @@ pub enum PixelFormat {
     },
 }
 
-pub struct FrameBufferFs<'a> {
-    framebuffer: &'a FrameBuffer,
+#[derive(Clone)]
+pub struct FrameBufferFs {
+    framebuffer: &'static FrameBuffer,
 }
 
-impl FrameBufferFs<'static> {
-    pub const fn new(framebuffer: &'static FrameBuffer) -> FrameBufferFs<'static> {
+impl FrameBufferFs {
+    pub const fn new(framebuffer: &'static FrameBuffer) -> FrameBufferFs {
         FrameBufferFs { framebuffer }
     }
 
@@ -88,53 +94,53 @@ impl FrameBufferFs<'static> {
     }
 }
 
-impl super::filesystem::FileSystem for FrameBufferFs<'static> {
-    fn dir_entries(&self, _dir: &str) -> Result<Vec<File>, Error> {
-        let mut vec: Vec<File> = Vec::new();
-        vec.push(File {
-            name: "0".to_string(),
-            path: "0".to_string(),
-            r#type: "file".to_string(),
-            size: self.framebuffer.info().byte_len as u64,
-            ptr: None,
-        });
+impl VNode for FrameBufferFs {
+    fn dir_entries(&self) -> Result<Vec<String>, Error> {
+        let mut vec = Vec::new();
+        vec.push("0".to_string());
         Ok(vec)
     }
 
-    fn open(&self, path: &str) -> Result<File, Error> {
-        Ok(File {
-            name: "0".to_string(),
-            path: path.to_string(),
-            r#type: "file".to_string(),
-            size: self.framebuffer.info().byte_len as u64,
-            ptr: None,
-        })
+    fn lookup(&self, path: &str) -> Result<Arc<dyn VNode>, Error> {
+        if path == "0" || path.is_empty() {
+            Ok(Arc::new(self.clone()))
+        } else {
+            Err(Error::FileDoesntExist)
+        }
     }
 
-    fn read(&self, _file: &File, buf: &mut [u8]) -> Result<isize, Error> {
+    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<isize, Error> {
         let fb = self.framebuffer.buffer();
-        buf.copy_from_slice(&fb[..buf.len()]);
+        if offset >= fb.len() {
+            return Ok(0);
+        }
+        let available = fb.len() - offset;
+        let to_read = core::cmp::min(buf.len(), available);
+        buf[..to_read].copy_from_slice(&fb[offset..(offset + to_read)]);
 
-        Ok(buf.len() as isize)
+        Ok(to_read as isize)
     }
 
-    fn write(&self, _file: &File, buf: &[u8]) -> Result<(), Error> {
+    fn write(&self, offset: usize, buf: &[u8]) -> Result<(), Error> {
         let pointer = self.framebuffer.buffer().as_ptr();
         let fb = unsafe {
             core::slice::from_raw_parts_mut(pointer as *mut u8, self.framebuffer.info().byte_len)
         };
-        fb[..buf.len()].copy_from_slice(buf);
+        if offset >= fb.len() {
+            return Ok(());
+        }
+        let available = fb.len() - offset;
+        let to_write = core::cmp::min(buf.len(), available);
+        fb[offset..(offset + to_write)].copy_from_slice(&buf[..to_write]);
 
         Ok(())
     }
 
-    fn ioctl(&self, _file: &File, _cmd: u32, arg: usize) -> Result<(), Error> {
+    fn ioctl(&self, _cmd: u32, arg: usize) -> Result<(), Error> {
         let ptr: *mut FrameBufferInfo = arg as *mut FrameBufferInfo;
-
         unsafe {
             (*ptr) = self.generate_info();
         }
-
         Ok(())
     }
 }

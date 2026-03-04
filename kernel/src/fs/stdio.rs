@@ -1,139 +1,133 @@
 // Filesystem for storing STDIO for applications
-use super::filesystem::{Error, File};
+use crate::fs::errors::Error;
+use crate::fs::vnode::VNode;
 use alloc::{
     collections::{BTreeMap, VecDeque},
     format,
-    string::ToString,
+    string::{String, ToString},
+    sync::Arc,
     vec::Vec,
 };
 use spin::Mutex;
 
 pub struct StdioFs {
-    fs: Mutex<BTreeMap<u32, Stdio>>,
+    fs: Mutex<BTreeMap<u32, Arc<Stdio>>>,
 }
 
-impl super::filesystem::FileSystem for StdioFs {
-    fn dir_entries(&self, dir: &str) -> Result<Vec<File>, Error> {
-        let mut ret: Vec<File> = Vec::new();
-        if dir.is_empty() {
-            for i in self.fs.lock().keys() {
-                ret.push(File {
-                    name: format!("{i}"),
-                    path: format!("{i}"),
-                    r#type: "dir".to_string(),
-                    size: 0,
-                    ptr: None,
-                });
+impl VNode for StdioFs {
+    fn dir_entries(&self) -> Result<Vec<String>, Error> {
+        let mut ret = Vec::new();
+        for key in self.fs.lock().keys() {
+            ret.push(format!("{key}"));
+        }
+        Ok(ret)
+    }
+
+    fn lookup(&self, name: &str) -> Result<Arc<dyn VNode>, Error> {
+        let split: Vec<&str> = name.split('/').collect();
+        if split.is_empty() {
+            return Err(Error::FileDoesntExist);
+        }
+
+        let proc_id = split[0]
+            .parse::<u32>()
+            .map_err(|_| Error::FileDoesntExist)?;
+
+        let mut fs = self.fs.lock();
+        let stdio = fs
+            .entry(proc_id)
+            .or_insert_with(|| Arc::new(Stdio::new()))
+            .clone();
+
+        if split.len() == 1 {
+            Ok(Arc::new(ProcessStdioFs { stdio }))
+        } else if split.len() == 2 {
+            match split[1] {
+                "stdin" => Ok(Arc::new(StdinVNode { stdio })),
+                "stdout" => Ok(Arc::new(StdoutVNode { stdio })),
+                _ => Err(Error::FileDoesntExist),
             }
-            return Ok(ret);
         } else {
-            let proc_id: u32 = dir.parse().unwrap();
-            if let Some(io) = self.fs.lock().get(&proc_id) {
-                ret.push(File {
-                    name: "stdin".to_string(),
-                    path: format!("{proc_id}/stdin"),
-                    r#type: "file".to_string(),
-                    size: io.stdin.lock().len() as u64,
-                    ptr: None,
-                });
-                ret.push(File {
-                    name: "stdout".to_string(),
-                    path: format!("{proc_id}/stdout"),
-                    r#type: "file".to_string(),
-                    size: io.stdout.lock().len() as u64,
-                    ptr: None,
-                });
-                return Ok(ret);
-            }
-        }
-
-        Err(Error::DirDoesntExist)
-    }
-
-    fn open(&self, path: &str) -> Result<File, Error> {
-        let split: Vec<&str> = path.split('/').collect();
-        if split.len() != 2 {
-            return Err(Error::FileDoesntExist);
-        }
-
-        let proc_id = split[0].parse::<u32>();
-        // if !split[1].eq("stdin") || !split[1].eq("stdout") {
-        //     return Err(Error::FileDoesntExist);
-        // }
-
-        match proc_id {
-            Ok(id) => {
-                if let Some(_stdio) = self.fs.lock().get(&id) {
-                    return Ok(File {
-                        name: split[1].to_string(),
-                        path: path.to_string(),
-                        r#type: "file".to_string(),
-                        size: 0, // fixme
-                        ptr: None,
-                    });
-                }
-                self.fs.lock().insert(id, Stdio::new());
-                Ok(File {
-                    name: split[1].to_string(),
-                    path: path.to_string(),
-                    r#type: "file".to_string(),
-                    size: 0, // fixme
-                    ptr: None,
-                })
-            }
-            Err(_) => Err(Error::FileDoesntExist),
+            Err(Error::FileDoesntExist)
         }
     }
 
-    fn read(&self, file: &File, buf: &mut [u8]) -> Result<isize, Error> {
-        let split: Vec<&str> = file.path.split('/').collect();
-        if split.len() != 2 {
-            return Err(Error::FileDoesntExist);
-        }
+    fn read(&self, _offset: usize, _buf: &mut [u8]) -> Result<isize, Error> {
+        Err(Error::ReadError)
+    }
 
-        let proc_id = split[0].parse::<u32>();
+    fn write(&self, _offset: usize, _buf: &[u8]) -> Result<(), Error> {
+        Err(Error::IoError)
+    }
 
-        match proc_id {
-            Ok(id) => {
-                if let Some(stdio) = self.fs.lock().get(&id) {
-                    let len = match split[1] {
-                        "stdin" => stdio.read_stdin(buf),
-                        "stdout" => stdio.read_stdout(buf),
-                        _ => return Err(Error::FileDoesntExist),
-                    };
-                    return Ok(len);
-                }
-                Err(Error::FileDoesntExist)
-            }
-            Err(_) => Err(Error::FileDoesntExist),
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        Err(Error::IoError)
+    }
+}
+
+pub struct ProcessStdioFs {
+    stdio: Arc<Stdio>,
+}
+
+impl VNode for ProcessStdioFs {
+    fn dir_entries(&self) -> Result<Vec<String>, Error> {
+        Ok(alloc::vec!["stdin".to_string(), "stdout".to_string()])
+    }
+
+    fn lookup(&self, name: &str) -> Result<Arc<dyn VNode>, Error> {
+        match name {
+            "stdin" => Ok(Arc::new(StdinVNode {
+                stdio: self.stdio.clone(),
+            })),
+            "stdout" => Ok(Arc::new(StdoutVNode {
+                stdio: self.stdio.clone(),
+            })),
+            _ => Err(Error::FileDoesntExist),
         }
     }
 
-    fn write(&self, file: &File, buf: &[u8]) -> Result<(), Error> {
-        let split: Vec<&str> = file.path.split('/').collect();
-        if split.len() != 2 {
-            return Err(Error::FileDoesntExist);
-        }
-
-        let proc_id = split[0].parse::<u32>();
-
-        match proc_id {
-            Ok(id) => {
-                if let Some(stdio) = self.fs.lock().get(&id) {
-                    match split[1] {
-                        "stdin" => stdio.write_stdin(buf),
-                        "stdout" => stdio.write_stdout(buf),
-                        _ => return Err(Error::FileDoesntExist),
-                    };
-                }
-                Err(Error::FileDoesntExist)
-            }
-            Err(_) => Err(Error::FileDoesntExist),
-        }
+    fn read(&self, _offset: usize, _buf: &mut [u8]) -> Result<isize, Error> {
+        Err(Error::ReadError)
     }
+    fn write(&self, _offset: usize, _buf: &[u8]) -> Result<(), Error> {
+        Err(Error::IoError)
+    }
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        Err(Error::IoError)
+    }
+}
 
-    fn ioctl(&self, _file: &File, _cmd: u32, _arg: usize) -> Result<(), Error> {
-        todo!()
+struct StdinVNode {
+    stdio: Arc<Stdio>,
+}
+
+impl VNode for StdinVNode {
+    fn read(&self, _offset: usize, buf: &mut [u8]) -> Result<isize, Error> {
+        Ok(self.stdio.read_stdin(buf))
+    }
+    fn write(&self, _offset: usize, buf: &[u8]) -> Result<(), Error> {
+        self.stdio.write_stdin(buf);
+        Ok(())
+    }
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        Err(Error::IoError)
+    }
+}
+
+struct StdoutVNode {
+    stdio: Arc<Stdio>,
+}
+
+impl VNode for StdoutVNode {
+    fn read(&self, _offset: usize, buf: &mut [u8]) -> Result<isize, Error> {
+        Ok(self.stdio.read_stdout(buf))
+    }
+    fn write(&self, _offset: usize, buf: &[u8]) -> Result<(), Error> {
+        self.stdio.write_stdout(buf);
+        Ok(())
+    }
+    fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<(), Error> {
+        Err(Error::IoError)
     }
 }
 
@@ -165,7 +159,6 @@ impl Default for Stdio {
 
 impl Stdio {
     pub fn new() -> Self {
-        // fix me - mutexes
         Stdio {
             stdout: Mutex::new(VecDeque::new()),
             stdin: Mutex::new(VecDeque::new()),
@@ -191,10 +184,10 @@ impl Stdio {
                 let data = self.stdin.lock().pop_front();
                 match data {
                     Some(x) => {
-                        len_read = len_read + 1;
+                        len_read += 1;
                         x
                     }
-                    None => 0,
+                    None => break,
                 }
             };
         }
@@ -208,10 +201,10 @@ impl Stdio {
                 let data = self.stdout.lock().pop_front();
                 match data {
                     Some(x) => {
-                        len_read = len_read + 1;
+                        len_read += 1;
                         x
                     }
-                    None => 0,
+                    None => break,
                 }
             };
         }

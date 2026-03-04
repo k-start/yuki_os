@@ -1,12 +1,12 @@
 use crate::{
     elf,
-    fs::{self, filesystem::FileDescriptor},
+    fs::{self, file::File},
     gdt, memory,
     process::{Context, Process, ProcessState},
 };
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use elfloader::ElfBinary;
-use spin::RwLock;
+use spin::{Mutex, RwLock};
 use x86_64::{
     registers::rflags::RFlags,
     structures::paging::{PageTable, PageTableFlags},
@@ -58,7 +58,7 @@ impl Scheduler {
         self.get_available_pid_unlocked(&allocated)
     }
 
-    pub fn schedule(&self, file: FileDescriptor) {
+    pub fn schedule(&self, file: Arc<Mutex<File>>) {
         let (_current_page_table_ptr, current_page_table_physaddr) = memory::active_page_table();
         let (user_page_table_ptr, user_page_table_physaddr) = memory::create_new_user_pagetable();
 
@@ -306,13 +306,13 @@ impl Scheduler {
     /// This function assumes that the provided `user_page_table_ptr` is active.
     fn load_elf(
         &self,
-        file: &FileDescriptor,
+        file: &Arc<Mutex<File>>,
         user_page_table_ptr: *mut PageTable,
     ) -> Result<u64, &'static str> {
         // Allocate a temporary buffer to read the ELF file into.
         // TODO: Move from the heap address
         let temp_elf_addr = VirtAddr::new(0x500000000000 as u64);
-        let temp_elf_size = file.file.size;
+        let temp_elf_size = file.lock().vnode.size() as u64;
 
         unsafe {
             memory::allocate_pages(
@@ -379,19 +379,20 @@ impl Scheduler {
     pub fn push_stdin(&self, key: u8) {
         let processes = self.processes.read();
         // for i in 0..processes.len() {
-        let _ = fs::vfs::write(processes[0].file_descriptors.get(&0).unwrap(), &[key]);
+        if let Some(fd) = processes[0].file_descriptors.get(&0) {
+            let _ = fs::vfs::write(fd, &[key]);
+        }
         // }
     }
 
     pub fn write_file_descriptor(&self, id: u32, buf: &[u8]) {
         self.cur_process.read().map(|cur_process_idx| {
-            let _ = fs::vfs::write(
-                self.processes.read()[cur_process_idx]
-                    .file_descriptors
-                    .get(&id)
-                    .unwrap(),
-                buf,
-            );
+            if let Some(fd) = self.processes.read()[cur_process_idx]
+                .file_descriptors
+                .get(&id)
+            {
+                let _ = fs::vfs::write(fd, buf);
+            }
         });
     }
 
@@ -399,19 +400,19 @@ impl Scheduler {
         self.cur_process
             .read()
             .map(|cur_process_idx| {
-                fs::vfs::read(
-                    self.processes.read()[cur_process_idx]
-                        .file_descriptors
-                        .get(&id)
-                        .unwrap(),
-                    buf,
-                )
-                .unwrap_or(0)
+                if let Some(fd) = self.processes.read()[cur_process_idx]
+                    .file_descriptors
+                    .get(&id)
+                {
+                    fs::vfs::read(fd, buf).unwrap_or(0)
+                } else {
+                    0
+                }
             })
             .unwrap_or(0)
     }
 
-    pub fn add_file_descriptor(&self, fd: &FileDescriptor) -> usize {
+    pub fn add_file_descriptor(&self, fd: &Arc<Mutex<File>>) -> usize {
         self.cur_process
             .read()
             .map(|cur_process_idx| {
@@ -428,14 +429,12 @@ impl Scheduler {
 
     pub fn ioctl(&self, fd: usize, cmd: u32, args: usize) {
         self.cur_process.read().map(|cur_process_idx| {
-            let _ = fs::vfs::ioctl(
-                self.processes.read()[cur_process_idx]
-                    .file_descriptors
-                    .get(&(fd as u32))
-                    .unwrap(),
-                cmd,
-                args,
-            );
+            if let Some(file) = self.processes.read()[cur_process_idx]
+                .file_descriptors
+                .get(&(fd as u32))
+            {
+                let _ = fs::vfs::ioctl(file, cmd, args);
+            }
         });
     }
 
