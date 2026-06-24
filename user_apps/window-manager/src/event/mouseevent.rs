@@ -13,7 +13,7 @@ pub struct MouseEventHandler {
 
 impl MouseEventHandler {
     pub fn new() -> Self {
-        let fd = unsafe { user_api::syscalls::open(b"/dev/mouse") };
+        let fd = unsafe { user_api::syscalls::open(b"/dev/mouse\0") };
         MouseEventHandler {
             fd,
             listeners: Vec::new(),

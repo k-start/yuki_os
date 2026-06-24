@@ -6,7 +6,7 @@ use crate::framebuffer::{self, FrameBuffer};
 
 lazy_static! {
     pub static ref FRAMEBUFFER: Mutex<FrameBuffer> = {
-        let fd = unsafe { user_api::syscalls::open(b"/framebuffer/0") };
+        let fd = unsafe { user_api::syscalls::open(b"/framebuffer/0\0") };
         Mutex::new(framebuffer::FrameBuffer::new(fd))
     };
     pub static ref WORLD: Mutex<World> = Mutex::new(World::new());
