@@ -46,9 +46,14 @@ impl World {
             for o in &self.objects {
                 o.lock().render(self)
             }
-        }
 
-        self.dirty = false;
+            {
+                let mut fb = FRAMEBUFFER.lock();
+                fb.flush();
+            }
+
+            self.dirty = false;
+        }
     }
 }
 

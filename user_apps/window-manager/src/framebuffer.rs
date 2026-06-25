@@ -72,6 +72,7 @@ pub struct Color {
 pub struct FrameBuffer {
     info: FrameBufferInfo,
     addr: usize,
+    back_buffer: alloc::vec::Vec<u8>,
 }
 
 impl FrameBuffer {
@@ -86,9 +87,12 @@ impl FrameBuffer {
 
         let framebuffer = unsafe { user_api::syscalls::mmap(0, info.byte_len, fd) };
 
+        let back_buffer = alloc::vec![0; info.byte_len];
+
         Self {
             info,
             addr: framebuffer,
+            back_buffer,
         }
     }
 
@@ -98,24 +102,23 @@ impl FrameBuffer {
         }
     }
 
+    pub fn flush(&mut self) {
+        unsafe {
+            let front = slice::from_raw_parts_mut(self.addr as *mut u8, self.info.byte_len);
+            front.copy_from_slice(&self.back_buffer);
+        }
+    }
+
     pub fn info(&self) -> FrameBufferInfo {
         self.info
     }
 
     fn buffer_mut(&mut self) -> &mut [u8] {
-        unsafe { self.create_buffer_mut() }
+        &mut self.back_buffer
     }
 
     fn buffer(&self) -> &[u8] {
-        unsafe { self.create_buffer() }
-    }
-
-    unsafe fn create_buffer<'a>(&self) -> &'a [u8] {
-        unsafe { slice::from_raw_parts(self.addr as *const u8, self.info.byte_len) }
-    }
-
-    unsafe fn create_buffer_mut<'a>(&self) -> &'a mut [u8] {
-        unsafe { slice::from_raw_parts_mut(self.addr as *mut u8, self.info.byte_len) }
+        &self.back_buffer
     }
 }
 
