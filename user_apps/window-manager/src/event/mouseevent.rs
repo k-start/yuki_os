@@ -21,21 +21,16 @@ impl MouseEventHandler {
     }
 
     pub fn poll(&self) {
-        let mut mouse_buf: [u8; 3] = [0; 3];
-        let bytes_read = unsafe { user_api::syscalls::read(self.fd, &mut mouse_buf) };
+        loop {
+            let mut mouse_buf: [u8; 3] = [0; 3];
+            let bytes_read = unsafe { user_api::syscalls::read(self.fd, &mut mouse_buf) };
 
-        let _ = mouse_buf == [0; 3]; // Fix me - weird bug where without this bytes_read = 0 even if they are read
+            let _ = mouse_buf == [0; 3]; // Fix me - weird bug where without this bytes_read = 0 even if they are read
 
-        if bytes_read > 0 {
-            // println!("mouse bytes_read = {bytes_read}");
-            // let x_delta = mouse_buf[1] as i8;
-            // let y_delta = mouse_buf[2] as i8;
+            if bytes_read <= 0 {
+                break;
+            }
 
-            // println!(
-            //     "x={x_delta}, y={y_delta}, left = {}, right = {}",
-            //     (mouse_buf[0] & 0x1) != 0,
-            //     (mouse_buf[0] & 0x2) != 0
-            // );
             let e = MouseEvent {
                 x_delta: mouse_buf[1] as i8,
                 y_delta: mouse_buf[2] as i8,
