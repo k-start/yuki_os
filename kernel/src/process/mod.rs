@@ -20,6 +20,7 @@ pub struct Process {
     pub state: ProcessState,       // the current state of the process
     pub page_table_phys: PhysAddr, // the page table for this process
     pub file_descriptors: BTreeMap<u32, Arc<Mutex<File>>>, // file descriptors for Stdio
+    pub mmap_next_addr: usize,     // next virtual address to use for mmap
 }
 
 impl Process {
@@ -44,6 +45,7 @@ impl Process {
             state: ProcessState::StartingInfo(exec_base, stack_end),
             page_table_phys,
             file_descriptors,
+            mmap_next_addr: 0x4000_0000_0000,
         }
     }
 }

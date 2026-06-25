@@ -109,6 +109,14 @@ impl VNode for FrameBufferFs {
         }
     }
 
+    fn mmap(&self, offset: usize, _size: usize) -> Result<x86_64::PhysAddr, Error> {
+        let memory_info = unsafe { crate::memory::MEMORY_INFO.as_ref().ok_or(Error::IoError)? };
+        let virt_addr = x86_64::VirtAddr::new(self.framebuffer.buffer().as_ptr() as u64) + offset;
+        let phys_addr = crate::memory::translate_addr(virt_addr, memory_info.phys_mem_offset)
+            .ok_or(Error::IoError)?;
+        Ok(phys_addr)
+    }
+
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<isize, Error> {
         let fb = self.framebuffer.buffer();
         if offset >= fb.len() {

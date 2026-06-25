@@ -177,26 +177,14 @@ fn handle_syscall(regs: &mut Context) {
 
             // println!("open {filename}");
         }
-        MMAP => {
-            // FIX ME - actually map properly, create usermode mapper
-            let _fd = regs.r8;
-
-            let memory_info = unsafe { crate::memory::MEMORY_INFO.as_mut().unwrap() };
-
-            let phys_addr = crate::memory::translate_addr(
-                VirtAddr::new(0x18000000000),
-                memory_info.phys_mem_offset,
-            )
-            .unwrap();
-
-            crate::memory::map_physical_address_to_user(
-                VirtAddr::new(0x400000000000),
-                phys_addr,
-                regs.rsi,
-            );
-
-            regs.rax = 0x400000000000;
-        }
+        MMAP => match scheduler::SCHEDULER.read().mmap(regs.r8, regs.rsi) {
+            Ok(addr) => {
+                regs.rax = addr;
+            }
+            Err(_) => {
+                regs.rax = 0;
+            }
+        },
         IOCTL => {
             // FIX ME - expand to actually check arguments rather than just assume we are getting
             // framebuffer info
