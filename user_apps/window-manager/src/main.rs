@@ -11,6 +11,7 @@ extern crate alloc;
 
 mod event;
 mod framebuffer;
+mod graphics;
 mod mouse;
 mod window;
 mod windowmanager;

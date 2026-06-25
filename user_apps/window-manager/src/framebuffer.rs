@@ -7,6 +7,8 @@ use embedded_graphics::{
     Pixel,
 };
 
+pub use crate::graphics::{set_pixel_in, Color, Position};
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FrameBufferInfo {
     /// The total size in bytes.
@@ -56,19 +58,6 @@ pub enum PixelFormat {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Position {
-    pub x: usize,
-    pub y: usize,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Color {
-    pub red: u8,
-    pub green: u8,
-    pub blue: u8,
-}
-
 pub struct FrameBuffer {
     info: FrameBufferInfo,
     addr: usize,
@@ -113,11 +102,11 @@ impl FrameBuffer {
         self.info
     }
 
-    fn buffer_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn buffer_mut(&mut self) -> &mut [u8] {
         &mut self.back_buffer
     }
 
-    fn buffer(&self) -> &[u8] {
+    pub(crate) fn buffer(&self) -> &[u8] {
         &self.back_buffer
     }
 }
@@ -172,6 +161,36 @@ impl<'f> DrawTarget for Display<'f> {
 
         Ok(())
     }
+
+    fn fill_solid(
+        &mut self,
+        area: &embedded_graphics::primitives::Rectangle,
+        color: Self::Color,
+    ) -> Result<(), Self::Error> {
+        let color = Color {
+            red: color.r(),
+            green: color.g(),
+            blue: color.b(),
+        };
+        self.framebuffer.draw_rect_clipped(
+            area.top_left.x,
+            area.top_left.y,
+            area.size.width,
+            area.size.height,
+            color,
+        );
+        Ok(())
+    }
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        let color = Color {
+            red: color.r(),
+            green: color.g(),
+            blue: color.b(),
+        };
+        self.framebuffer.clear_to_color(color);
+        Ok(())
+    }
 }
 
 impl<'f> OriginDimensions for Display<'f> {
@@ -179,40 +198,5 @@ impl<'f> OriginDimensions for Display<'f> {
         let info = self.framebuffer.info();
 
         Size::new(info.width as u32, info.height as u32)
-    }
-}
-
-pub fn set_pixel_in(framebuffer: &mut FrameBuffer, position: Position, color: Color) {
-    let info = framebuffer.info();
-
-    // calculate offset to first byte of pixel
-    let byte_offset = {
-        // use stride to calculate pixel offset of target line
-        let line_offset = position.y * info.stride;
-        // add x position to get the absolute pixel offset in buffer
-        let pixel_offset = line_offset + position.x;
-        // convert to byte offset
-        pixel_offset * info.bytes_per_pixel
-    };
-
-    // set pixel based on color format
-    let pixel_buffer = &mut framebuffer.buffer_mut()[byte_offset..];
-    match info.pixel_format {
-        PixelFormat::Rgb => {
-            pixel_buffer[0] = color.red;
-            pixel_buffer[1] = color.green;
-            pixel_buffer[2] = color.blue;
-        }
-        PixelFormat::Bgr => {
-            pixel_buffer[0] = color.blue;
-            pixel_buffer[1] = color.green;
-            pixel_buffer[2] = color.red;
-        }
-        PixelFormat::U8 => {
-            // use a simple average-based grayscale transform
-            let gray = color.red / 3 + color.green / 3 + color.blue / 3;
-            pixel_buffer[0] = gray;
-        }
-        other => panic!("unknown pixel format {other:?}"),
     }
 }
