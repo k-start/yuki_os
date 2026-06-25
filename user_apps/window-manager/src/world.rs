@@ -16,6 +16,7 @@ pub struct World {
     objects: Vec<Arc<Mutex<dyn Renderable + Send>>>,
     pub mouse_x: i32,
     pub mouse_y: i32,
+    pub dirty: bool,
 }
 
 impl World {
@@ -27,6 +28,7 @@ impl World {
             objects: Vec::new(),
             mouse_x: 0,
             mouse_y: 0,
+            dirty: true,
         }
     }
 
@@ -34,10 +36,19 @@ impl World {
         self.objects.push(listener);
     }
 
-    pub fn render(&self) {
-        for o in &self.objects {
-            o.lock().render(self)
+    pub fn render(&mut self) {
+        if self.dirty {
+            {
+                let mut fb = FRAMEBUFFER.lock();
+                fb.clear();
+            }
+
+            for o in &self.objects {
+                o.lock().render(self)
+            }
         }
+
+        self.dirty = false;
     }
 }
 

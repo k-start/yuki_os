@@ -39,6 +39,7 @@ impl MouseEventListener for WindowManager {
             // }
             // }
 
+            WORLD.lock().dirty = true;
             println!("{x} {y} click");
         }
     }
