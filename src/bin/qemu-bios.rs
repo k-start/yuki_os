@@ -9,6 +9,12 @@ fn main() {
     qemu.arg(format!("format=raw,file={}", env!("BIOS_IMAGE")));
     qemu.arg("-drive");
     qemu.arg("format=raw,file=user_disk.img,bus=1");
+    qemu.arg("-accel");
+    qemu.arg("whpx");
+    qemu.arg("-accel");
+    qemu.arg("hax");
+    qemu.arg("-accel");
+    qemu.arg("tcg");
     // qemu.arg("format=raw,file=fat:rw:fat-type:32:test-dir,bus=1");
     // qemu.arg("-d");
     // qemu.arg("cpu_reset");

@@ -9,6 +9,12 @@ fn main() {
     qemu.arg(format!("format=raw,file={}", env!("UEFI_IMAGE")));
     qemu.arg("-drive");
     qemu.arg("format=raw,file=user_disk.img,bus=1");
+    qemu.arg("-accel");
+    qemu.arg("whpx");
+    qemu.arg("-accel");
+    qemu.arg("hax");
+    qemu.arg("-accel");
+    qemu.arg("tcg");
     qemu.arg("-bios").arg(ovmf_prebuilt::ovmf_pure_efi());
     qemu.arg("-serial");
     qemu.arg("mon:stdio");
