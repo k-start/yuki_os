@@ -9,6 +9,11 @@ pub trait VNode: Send + Sync {
     /// Write data to the vnode at the given offset
     fn write(&self, offset: usize, buf: &[u8]) -> Result<(), Error>;
 
+    /// Map a region of the vnode into physical memory
+    fn mmap(&self, _offset: usize, _size: usize) -> Result<x86_64::PhysAddr, Error> {
+        Err(Error::IoError)
+    }
+
     /// Perform a device-specific control operation
     fn ioctl(&self, cmd: u32, arg: usize) -> Result<(), Error>;
 

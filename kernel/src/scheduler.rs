@@ -266,6 +266,7 @@ impl Scheduler {
                     state: ProcessState::SavedContext(ctx),
                     page_table_phys: current_page_table_physaddr, // Use same address space
                     file_descriptors: cur_process.file_descriptors.clone(),
+                    mmap_next_addr: cur_process.mmap_next_addr,
                 };
                 processes.push(Box::new(child_process));
                 return pid;
@@ -436,6 +437,34 @@ impl Scheduler {
                 let _ = fs::vfs::ioctl(file, cmd, args);
             }
         });
+    }
+
+    pub fn mmap(&self, fd: usize, len: usize) -> Result<usize, fs::errors::Error> {
+        let mut processes = self.processes.write();
+        let cur_process_idx = self.cur_process.read().ok_or(fs::errors::Error::IoError)?;
+        if cur_process_idx >= processes.len() {
+            return Err(fs::errors::Error::IoError);
+        }
+        let process = &mut processes[cur_process_idx];
+        let file = process
+            .file_descriptors
+            .get(&(fd as u32))
+            .ok_or(fs::errors::Error::FileDoesntExist)?;
+
+        let file_guard = file.lock();
+        let phys_addr = file_guard.vnode.mmap(0, len)?;
+
+        let virt_addr = process.mmap_next_addr;
+        crate::memory::map_physical_address_to_user(
+            VirtAddr::new(virt_addr as u64),
+            phys_addr,
+            len,
+        );
+
+        let aligned_len = (len + 0xfff) & !0xfff;
+        process.mmap_next_addr += aligned_len;
+
+        Ok(virt_addr)
     }
 
     pub fn get_cur_pid(&self) -> usize {

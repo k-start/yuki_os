@@ -14,7 +14,6 @@ pub struct Window {
     y: i32,
     w: u32,
     h: u32,
-    changed: bool,
 }
 
 impl Window {
@@ -24,7 +23,6 @@ impl Window {
             y,
             w: 500,
             h: 500,
-            changed: true,
         }));
         // MOUSE_EVENT.lock().register_listener(x.clone());
         // WORLD.lock().register(window);
@@ -41,37 +39,33 @@ impl Window {
     }
 
     pub fn render(&mut self, _state: &World) {
-        if self.changed {
-            let mut fb = FRAMEBUFFER.lock();
-            let mut display = Display::new(&mut fb);
+        let mut fb = FRAMEBUFFER.lock();
+        let mut display = Display::new(&mut fb);
 
-            let style = PrimitiveStyleBuilder::new()
-                .stroke_color(Rgb888::WHITE)
-                .stroke_width(3)
-                .stroke_alignment(StrokeAlignment::Outside)
-                .fill_color(Rgb888::BLACK)
-                .build();
+        let style = PrimitiveStyleBuilder::new()
+            .stroke_color(Rgb888::WHITE)
+            .stroke_width(3)
+            .stroke_alignment(StrokeAlignment::Outside)
+            .fill_color(Rgb888::BLACK)
+            .build();
 
-            Rectangle::new(Point::new(self.x, self.y), Size::new(self.w, self.h))
-                .into_styled(style)
-                .draw(&mut display)
-                .unwrap();
-
-            Rectangle::new(Point::new(self.x, self.y), Size::new(self.w, 25))
-                .into_styled(style)
-                .draw(&mut display)
-                .unwrap();
-
-            Rectangle::new(
-                Point::new(self.x + (self.w - 25) as i32, self.y),
-                Size::new(25, 25),
-            )
+        Rectangle::new(Point::new(self.x, self.y), Size::new(self.w, self.h))
             .into_styled(style)
             .draw(&mut display)
             .unwrap();
 
-            self.changed = false;
-        }
+        Rectangle::new(Point::new(self.x, self.y), Size::new(self.w, 25))
+            .into_styled(style)
+            .draw(&mut display)
+            .unwrap();
+
+        Rectangle::new(
+            Point::new(self.x + (self.w - 25) as i32, self.y),
+            Size::new(25, 25),
+        )
+        .into_styled(style)
+        .draw(&mut display)
+        .unwrap();
     }
 }
 
