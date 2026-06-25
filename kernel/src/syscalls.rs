@@ -171,11 +171,14 @@ fn handle_syscall(regs: &mut Context) {
                 .unwrap()
                 .to_owned();
 
-            let fd = crate::fs::vfs::open(&filename).unwrap();
-
-            regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(&fd);
-
-            // println!("open {filename}");
+            match crate::fs::vfs::open(&filename) {
+                Ok(fd) => {
+                    regs.rax = scheduler::SCHEDULER.read().add_file_descriptor(&fd);
+                }
+                Err(_) => {
+                    regs.rax = usize::MAX;
+                }
+            }
         }
         MMAP => match scheduler::SCHEDULER.read().mmap(regs.r8, regs.rsi) {
             Ok(addr) => {
