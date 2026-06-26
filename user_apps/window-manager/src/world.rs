@@ -7,7 +7,6 @@ use embedded_graphics::{
     mono_font::{ascii::FONT_6X10, MonoTextStyle},
     pixelcolor::Rgb888,
     prelude::*,
-    primitives::Rectangle,
     text::Text,
 };
 
@@ -44,26 +43,6 @@ impl World {
     pub fn register(&mut self, listener: Arc<Mutex<dyn Renderable + Send>>) {
         self.objects.push(listener);
     }
-
-    // pub fn render(&mut self) {
-    //     if self.dirty {
-    //         {
-    //             let mut fb = FRAMEBUFFER.lock();
-    //             fb.clear();
-    //         }
-
-    //         for o in &self.objects {
-    //             o.lock().render(self)
-    //         }
-
-    //         {
-    //             let mut fb = FRAMEBUFFER.lock();
-    //             fb.flush();
-    //         }
-
-    //         self.dirty = false;
-    //     }
-    // }
 
     pub fn render(&mut self) {
         if self.dirty {
