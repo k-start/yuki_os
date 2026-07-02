@@ -17,7 +17,7 @@ pub static SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
 static STACK_START: usize = 0x800000;
 static STACK_SIZE: usize = 0x100000;
 static HEAP_START: usize = 0x5000_0000_0000;
-static HEAP_SIZE: usize = 0x100000;
+static HEAP_SIZE: usize = 0x1_000_000;
 
 pub struct Scheduler {
     processes: RwLock<Vec<Box<Process>>>,

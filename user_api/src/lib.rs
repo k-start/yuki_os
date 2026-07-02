@@ -32,7 +32,7 @@ use linked_list_allocator::LockedHeap;
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 pub fn init_heap() {
     let heap_start = 0x5000_0000_0000;
-    let heap_size = 0x100000;
+    let heap_size = 0x1_000_000;
     unsafe {
         ALLOCATOR.lock().init(heap_start, heap_size);
     }
