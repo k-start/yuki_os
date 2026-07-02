@@ -157,6 +157,32 @@ impl FrameBuffer {
     }
 }
 
+#[inline(always)]
+fn draw_pixels_format<I, F>(
+    pixels: I,
+    width: usize,
+    height: usize,
+    stride_bytes: usize,
+    bpp: usize,
+    ptr: *mut u8,
+    write_pixel: F,
+) where
+    I: IntoIterator<Item = Pixel<Rgb888>>,
+    F: Fn(*mut u8, Rgb888),
+{
+    for Pixel(coordinates, color) in pixels {
+        let c: (i32, i32) = coordinates.into();
+        let x = c.0 as usize;
+        let y = c.1 as usize;
+        if x < width && y < height {
+            let byte_offset = y * stride_bytes + x * bpp;
+            unsafe {
+                write_pixel(ptr.add(byte_offset), color);
+            }
+        }
+    }
+}
+
 impl<'f> DrawTarget for Display<'f> {
     type Color = Rgb888;
 
@@ -170,78 +196,74 @@ impl<'f> DrawTarget for Display<'f> {
         let info = self.framebuffer.info();
         let width = info.width;
         let height = info.height;
-        let stride = info.stride;
         let bpp = info.bytes_per_pixel;
+        let stride_bytes = info.stride * bpp;
         let format = info.pixel_format;
 
-        let buf = self.framebuffer.buffer_mut();
+        let ptr = self.framebuffer.buffer_mut().as_mut_ptr();
 
         match format {
             PixelFormat::Rgb => {
-                for Pixel(coordinates, color) in pixels {
-                    let c: (i32, i32) = coordinates.into();
-                    let x = c.0 as usize;
-                    let y = c.1 as usize;
-                    if x < width && y < height {
-                        let byte_offset = (y * stride + x) * bpp;
-                        if byte_offset + 3 <= buf.len() {
-                            buf[byte_offset] = color.r();
-                            buf[byte_offset + 1] = color.g();
-                            buf[byte_offset + 2] = color.b();
-                        }
-                    }
-                }
+                draw_pixels_format(
+                    pixels,
+                    width,
+                    height,
+                    stride_bytes,
+                    bpp,
+                    ptr,
+                    |p, color| unsafe {
+                        *p = color.r();
+                        *p.add(1) = color.g();
+                        *p.add(2) = color.b();
+                    },
+                );
             }
             PixelFormat::Bgr => {
-                for Pixel(coordinates, color) in pixels {
-                    let c: (i32, i32) = coordinates.into();
-                    let x = c.0 as usize;
-                    let y = c.1 as usize;
-                    if x < width && y < height {
-                        let byte_offset = (y * stride + x) * bpp;
-                        if byte_offset + 3 <= buf.len() {
-                            buf[byte_offset] = color.b();
-                            buf[byte_offset + 1] = color.g();
-                            buf[byte_offset + 2] = color.r();
-                        }
-                    }
-                }
+                draw_pixels_format(
+                    pixels,
+                    width,
+                    height,
+                    stride_bytes,
+                    bpp,
+                    ptr,
+                    |p, color| unsafe {
+                        *p = color.b();
+                        *p.add(1) = color.g();
+                        *p.add(2) = color.r();
+                    },
+                );
             }
             PixelFormat::U8 => {
-                for Pixel(coordinates, color) in pixels {
-                    let c: (i32, i32) = coordinates.into();
-                    let x = c.0 as usize;
-                    let y = c.1 as usize;
-                    if x < width && y < height {
-                        let byte_offset = (y * stride + x) * bpp;
-                        if byte_offset + 1 <= buf.len() {
-                            buf[byte_offset] = color.r() / 3 + color.g() / 3 + color.b() / 3;
-                        }
-                    }
-                }
+                draw_pixels_format(
+                    pixels,
+                    width,
+                    height,
+                    stride_bytes,
+                    bpp,
+                    ptr,
+                    |p, color| unsafe {
+                        *p = color.r() / 3 + color.g() / 3 + color.b() / 3;
+                    },
+                );
             }
             _ => {
-                for Pixel(coordinates, color) in pixels {
-                    let c: (i32, i32) = coordinates.into();
-                    let x = c.0 as usize;
-                    let y = c.1 as usize;
-                    if x < width && y < height {
-                        let byte_offset = (y * stride + x) * bpp;
-                        if byte_offset + bpp <= buf.len() {
-                            let pixel_buffer = &mut buf[byte_offset..];
-                            let r = color.r();
-                            let g = color.g();
-                            let b = color.b();
-                            pixel_buffer[0] = r;
-                            if bpp > 1 {
-                                pixel_buffer[1] = g;
-                            }
-                            if bpp > 2 {
-                                pixel_buffer[2] = b;
-                            }
+                draw_pixels_format(
+                    pixels,
+                    width,
+                    height,
+                    stride_bytes,
+                    bpp,
+                    ptr,
+                    |p, color| unsafe {
+                        *p = color.r();
+                        if bpp > 1 {
+                            *p.add(1) = color.g();
                         }
-                    }
-                }
+                        if bpp > 2 {
+                            *p.add(2) = color.b();
+                        }
+                    },
+                );
             }
         }
 
