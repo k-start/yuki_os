@@ -1,13 +1,5 @@
 #![allow(dead_code)]
 use core::slice;
-use embedded_graphics::{
-    draw_target::DrawTarget,
-    geometry::{OriginDimensions, Size},
-    pixelcolor::{Rgb888, RgbColor},
-    Pixel,
-};
-
-pub use crate::graphics::{set_pixel_in, Color, Position};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FrameBufferInfo {
@@ -112,91 +104,11 @@ impl FrameBuffer {
 }
 
 pub struct Display<'f> {
-    framebuffer: &'f mut FrameBuffer,
+    pub(crate) framebuffer: &'f mut FrameBuffer,
 }
 
 impl<'f> Display<'f> {
     pub fn new(framebuffer: &'f mut FrameBuffer) -> Display {
         Display { framebuffer }
-    }
-
-    fn draw_pixel(&mut self, Pixel(coordinates, color): Pixel<Rgb888>) {
-        // ignore any out of bounds pixels
-        let (width, height) = {
-            let info = self.framebuffer.info();
-
-            (info.width, info.height)
-        };
-
-        let (x, y) = {
-            let c: (i32, i32) = coordinates.into();
-            (c.0 as usize, c.1 as usize)
-        };
-
-        if (0..width).contains(&x) && (0..height).contains(&y) {
-            let color = Color {
-                red: color.r(),
-                green: color.g(),
-                blue: color.b(),
-            };
-
-            set_pixel_in(self.framebuffer, Position { x, y }, color);
-        }
-    }
-}
-
-impl<'f> DrawTarget for Display<'f> {
-    type Color = Rgb888;
-
-    /// Drawing operations can never fail.
-    type Error = core::convert::Infallible;
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
-    where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
-    {
-        for pixel in pixels.into_iter() {
-            self.draw_pixel(pixel);
-        }
-
-        Ok(())
-    }
-
-    fn fill_solid(
-        &mut self,
-        area: &embedded_graphics::primitives::Rectangle,
-        color: Self::Color,
-    ) -> Result<(), Self::Error> {
-        let color = Color {
-            red: color.r(),
-            green: color.g(),
-            blue: color.b(),
-        };
-        self.framebuffer.draw_rect_clipped(
-            area.top_left.x,
-            area.top_left.y,
-            area.size.width,
-            area.size.height,
-            color,
-        );
-        Ok(())
-    }
-
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        let color = Color {
-            red: color.r(),
-            green: color.g(),
-            blue: color.b(),
-        };
-        self.framebuffer.clear_to_color(color);
-        Ok(())
-    }
-}
-
-impl<'f> OriginDimensions for Display<'f> {
-    fn size(&self) -> Size {
-        let info = self.framebuffer.info();
-
-        Size::new(info.width as u32, info.height as u32)
     }
 }

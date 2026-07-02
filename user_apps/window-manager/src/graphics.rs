@@ -1,4 +1,10 @@
-use crate::framebuffer::{FrameBuffer, PixelFormat};
+use crate::framebuffer::{Display, FrameBuffer, PixelFormat};
+use embedded_graphics::{
+    draw_target::DrawTarget,
+    geometry::{OriginDimensions, Size},
+    pixelcolor::{Rgb888, RgbColor},
+    Pixel,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position {
@@ -11,41 +17,6 @@ pub struct Color {
     pub red: u8,
     pub green: u8,
     pub blue: u8,
-}
-
-pub fn set_pixel_in(framebuffer: &mut FrameBuffer, position: Position, color: Color) {
-    let info = framebuffer.info();
-
-    // calculate offset to first byte of pixel
-    let byte_offset = {
-        // use stride to calculate pixel offset of target line
-        let line_offset = position.y * info.stride;
-        // add x position to get the absolute pixel offset in buffer
-        let pixel_offset = line_offset + position.x;
-        // convert to byte offset
-        pixel_offset * info.bytes_per_pixel
-    };
-
-    // set pixel based on color format
-    let pixel_buffer = &mut framebuffer.buffer_mut()[byte_offset..];
-    match info.pixel_format {
-        PixelFormat::Rgb => {
-            pixel_buffer[0] = color.red;
-            pixel_buffer[1] = color.green;
-            pixel_buffer[2] = color.blue;
-        }
-        PixelFormat::Bgr => {
-            pixel_buffer[0] = color.blue;
-            pixel_buffer[1] = color.green;
-            pixel_buffer[2] = color.red;
-        }
-        PixelFormat::U8 => {
-            // use a simple average-based grayscale transform
-            let gray = color.red / 3 + color.green / 3 + color.blue / 3;
-            pixel_buffer[0] = gray;
-        }
-        other => panic!("unknown pixel format {other:?}"),
-    }
 }
 
 impl FrameBuffer {
@@ -183,5 +154,135 @@ impl FrameBuffer {
                 color,
             );
         }
+    }
+}
+
+impl<'f> DrawTarget for Display<'f> {
+    type Color = Rgb888;
+
+    /// Drawing operations can never fail.
+    type Error = core::convert::Infallible;
+
+    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Pixel<Self::Color>>,
+    {
+        let info = self.framebuffer.info();
+        let width = info.width;
+        let height = info.height;
+        let stride = info.stride;
+        let bpp = info.bytes_per_pixel;
+        let format = info.pixel_format;
+
+        let buf = self.framebuffer.buffer_mut();
+
+        match format {
+            PixelFormat::Rgb => {
+                for Pixel(coordinates, color) in pixels {
+                    let c: (i32, i32) = coordinates.into();
+                    let x = c.0 as usize;
+                    let y = c.1 as usize;
+                    if x < width && y < height {
+                        let byte_offset = (y * stride + x) * bpp;
+                        if byte_offset + 3 <= buf.len() {
+                            buf[byte_offset] = color.r();
+                            buf[byte_offset + 1] = color.g();
+                            buf[byte_offset + 2] = color.b();
+                        }
+                    }
+                }
+            }
+            PixelFormat::Bgr => {
+                for Pixel(coordinates, color) in pixels {
+                    let c: (i32, i32) = coordinates.into();
+                    let x = c.0 as usize;
+                    let y = c.1 as usize;
+                    if x < width && y < height {
+                        let byte_offset = (y * stride + x) * bpp;
+                        if byte_offset + 3 <= buf.len() {
+                            buf[byte_offset] = color.b();
+                            buf[byte_offset + 1] = color.g();
+                            buf[byte_offset + 2] = color.r();
+                        }
+                    }
+                }
+            }
+            PixelFormat::U8 => {
+                for Pixel(coordinates, color) in pixels {
+                    let c: (i32, i32) = coordinates.into();
+                    let x = c.0 as usize;
+                    let y = c.1 as usize;
+                    if x < width && y < height {
+                        let byte_offset = (y * stride + x) * bpp;
+                        if byte_offset + 1 <= buf.len() {
+                            buf[byte_offset] = color.r() / 3 + color.g() / 3 + color.b() / 3;
+                        }
+                    }
+                }
+            }
+            _ => {
+                for Pixel(coordinates, color) in pixels {
+                    let c: (i32, i32) = coordinates.into();
+                    let x = c.0 as usize;
+                    let y = c.1 as usize;
+                    if x < width && y < height {
+                        let byte_offset = (y * stride + x) * bpp;
+                        if byte_offset + bpp <= buf.len() {
+                            let pixel_buffer = &mut buf[byte_offset..];
+                            let r = color.r();
+                            let g = color.g();
+                            let b = color.b();
+                            pixel_buffer[0] = r;
+                            if bpp > 1 {
+                                pixel_buffer[1] = g;
+                            }
+                            if bpp > 2 {
+                                pixel_buffer[2] = b;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn fill_solid(
+        &mut self,
+        area: &embedded_graphics::primitives::Rectangle,
+        color: Self::Color,
+    ) -> Result<(), Self::Error> {
+        let color = Color {
+            red: color.r(),
+            green: color.g(),
+            blue: color.b(),
+        };
+        self.framebuffer.draw_rect_clipped(
+            area.top_left.x,
+            area.top_left.y,
+            area.size.width,
+            area.size.height,
+            color,
+        );
+        Ok(())
+    }
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        let color = Color {
+            red: color.r(),
+            green: color.g(),
+            blue: color.b(),
+        };
+        self.framebuffer.clear_to_color(color);
+        Ok(())
+    }
+}
+
+impl<'f> OriginDimensions for Display<'f> {
+    fn size(&self) -> Size {
+        let info = self.framebuffer.info();
+
+        Size::new(info.width as u32, info.height as u32)
     }
 }
