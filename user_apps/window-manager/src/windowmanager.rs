@@ -1,54 +1,51 @@
+use crate::framebuffer::Display;
 use crate::window::Window;
-use crate::world::World;
-use alloc::{sync::Arc, vec::Vec};
-use spin::Mutex;
-
-use crate::{
-    event::mouseevent::{MouseEvent, MouseEventListener, MOUSE_EVENT},
-    world::{Renderable, WORLD},
-};
+use alloc::vec::Vec;
 
 pub struct WindowManager {
-    pub windows: Vec<Arc<Mutex<Window>>>,
+    pub windows: Vec<Window>,
 }
 
 impl WindowManager {
-    pub fn new() {
-        let mut windows = Vec::new();
-        windows.push(Window::new(100, 100));
-        windows.push(Window::new(650, 100));
-        let windowmanager = Arc::new(Mutex::new(WindowManager { windows }));
-
-        MOUSE_EVENT.lock().register_listener(windowmanager.clone());
-        WORLD.lock().register(windowmanager);
-    }
-}
-
-impl MouseEventListener for WindowManager {
-    fn handle(&mut self, e: MouseEvent) {
-        if e.left {
-            let x = WORLD.lock().mouse_x;
-            let y = WORLD.lock().mouse_y;
-
-            // for i in self.windows.clone().into_iter() {
-            // let (w_x, w_y, w_w, w_h) = i.lock().get_location();
-
-            // if x >= w_x && x <= w_x + w_w as i32 && y >= w_y && y <= w_y + w_h as i32 {
-            //     i.lock().click(x - w_x, y - w_y);
-            //     // break;
-            // }
-            // }
-
-            WORLD.lock().dirty = true;
-            println!("{x} {y} click");
+    pub fn new() -> Self {
+        Self {
+            windows: Vec::new(),
         }
     }
-}
 
-impl Renderable for WindowManager {
-    fn render(&mut self, state: &World) {
-        for i in self.windows.clone().into_iter() {
-            i.lock().render(state);
+    pub fn add_window(&mut self, window: Window) {
+        self.windows.push(window);
+    }
+
+    pub fn handle_mouse(&mut self, mouse_x: i32, mouse_y: i32, mouse_left: bool) {
+        if mouse_left {
+            let mut clicked_idx = None;
+            for (idx, window) in self.windows.iter().enumerate().rev() {
+                let (w_x, w_y, w_w, w_h) = window.get_location();
+                if mouse_x >= w_x
+                    && mouse_x <= w_x + w_w as i32
+                    && mouse_y >= w_y
+                    && mouse_y <= w_y + w_h as i32
+                {
+                    clicked_idx = Some(idx);
+                    break;
+                }
+            }
+
+            if let Some(idx) = clicked_idx {
+                let window = self.windows.get(idx).unwrap();
+                window.click(
+                    mouse_x - window.get_location().0,
+                    mouse_y - window.get_location().1,
+                );
+            }
+            println!("{mouse_x} {mouse_y} click");
+        }
+    }
+
+    pub fn render(&mut self, display: &mut Display) {
+        for window in &mut self.windows {
+            window.render(display);
         }
     }
 }

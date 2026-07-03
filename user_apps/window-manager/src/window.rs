@@ -1,8 +1,4 @@
-use crate::world::World;
-use alloc::sync::Arc;
-use spin::Mutex;
-
-use crate::{framebuffer::Display, world::FRAMEBUFFER};
+use crate::framebuffer::Display;
 use embedded_graphics::{
     pixelcolor::Rgb888,
     prelude::*,
@@ -17,17 +13,8 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(x: i32, y: i32) -> Arc<Mutex<Window>> {
-        let window = Arc::new(Mutex::new(Self {
-            x,
-            y,
-            w: 500,
-            h: 500,
-        }));
-        // MOUSE_EVENT.lock().register_listener(x.clone());
-        // WORLD.lock().register(window);
-
-        window
+    pub fn new(x: i32, y: i32, w: u32, h: u32) -> Self {
+        Self { x, y, w, h }
     }
 
     pub fn get_location(&self) -> (i32, i32, u32, u32) {
@@ -38,10 +25,7 @@ impl Window {
         println!("window click {x}, {y}");
     }
 
-    pub fn render(&mut self, _state: &World) {
-        let mut fb = FRAMEBUFFER.lock();
-        let mut display = Display::new(&mut fb);
-
+    pub fn render(&mut self, display: &mut Display) {
         let style = PrimitiveStyleBuilder::new()
             .stroke_color(Rgb888::WHITE)
             .stroke_width(3)
@@ -51,12 +35,12 @@ impl Window {
 
         Rectangle::new(Point::new(self.x, self.y), Size::new(self.w, self.h))
             .into_styled(style)
-            .draw(&mut display)
+            .draw(display)
             .unwrap();
 
         Rectangle::new(Point::new(self.x, self.y), Size::new(self.w, 25))
             .into_styled(style)
-            .draw(&mut display)
+            .draw(display)
             .unwrap();
 
         Rectangle::new(
@@ -64,26 +48,8 @@ impl Window {
             Size::new(25, 25),
         )
         .into_styled(style)
-        .draw(&mut display)
+        .draw(display)
         .unwrap();
     }
 }
 
-// impl MouseEventListener for Window {
-//     fn handle(&mut self, e: MouseEvent) {
-//         self.x = self.x + e.x_delta as i32;
-//         self.y = self.y - e.y_delta as i32;
-//         if self.x < 0 {
-//             self.x = 0;
-//         } else if self.x > FRAMEBUFFER.lock().info().width as i32 {
-//             self.x = FRAMEBUFFER.lock().info().width as i32;
-//         }
-
-//         if self.y < 0 {
-//             self.y = 0;
-//         } else if self.y > FRAMEBUFFER.lock().info().height as i32 {
-//             self.y = FRAMEBUFFER.lock().info().height as i32;
-//         }
-//         // println!("{:?}", e);
-//     }
-// }

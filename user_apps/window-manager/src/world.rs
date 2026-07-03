@@ -1,12 +1,14 @@
-use alloc::{sync::Arc, vec::Vec};
 use lazy_static::lazy_static;
 use spin::Mutex;
 
+use crate::event::mouseevent::MouseEvent;
 use crate::framebuffer::{self, Display, FrameBuffer};
+use crate::windowmanager::WindowManager;
 use embedded_graphics::{
     mono_font::{ascii::FONT_6X10, MonoTextStyle},
     pixelcolor::Rgb888,
     prelude::*,
+    primitives::{PrimitiveStyleBuilder, Rectangle},
     text::Text,
 };
 
@@ -19,7 +21,7 @@ lazy_static! {
 }
 
 pub struct World {
-    objects: Vec<Arc<Mutex<dyn Renderable + Send>>>,
+    pub window_manager: WindowManager,
     pub mouse_x: i32,
     pub mouse_y: i32,
     pub dirty: bool,
@@ -32,7 +34,7 @@ impl World {
         fb.clear();
 
         World {
-            objects: Vec::new(),
+            window_manager: WindowManager::new(),
             mouse_x: 0,
             mouse_y: 0,
             dirty: true,
@@ -40,8 +42,34 @@ impl World {
         }
     }
 
-    pub fn register(&mut self, listener: Arc<Mutex<dyn Renderable + Send>>) {
-        self.objects.push(listener);
+    pub fn handle_mouse_event(&mut self, e: MouseEvent) {
+        let old_x = self.mouse_x;
+        let old_y = self.mouse_y;
+
+        self.mouse_x += e.x_delta as i32;
+        self.mouse_y -= e.y_delta as i32;
+
+        let fb_width = FRAMEBUFFER.lock().info().width as i32;
+        let fb_height = FRAMEBUFFER.lock().info().height as i32;
+
+        if self.mouse_x < 0 {
+            self.mouse_x = 0;
+        } else if self.mouse_x > fb_width {
+            self.mouse_x = fb_width;
+        }
+
+        if self.mouse_y < 0 {
+            self.mouse_y = 0;
+        } else if self.mouse_y > fb_height {
+            self.mouse_y = fb_height;
+        }
+
+        if old_x != self.mouse_x || old_y != self.mouse_y || e.left {
+            self.dirty = true;
+        }
+
+        self.window_manager
+            .handle_mouse(self.mouse_x, self.mouse_y, e.left);
     }
 
     pub fn render(&mut self) {
@@ -64,14 +92,20 @@ impl World {
                 Text::new(&text, Point::new(10, 16), text_style)
                     .draw(&mut display)
                     .unwrap();
-            }
 
-            for o in &self.objects {
-                o.lock().render(self);
-            }
+                // Draw windows
+                self.window_manager.render(&mut display);
 
-            {
-                let mut fb = FRAMEBUFFER.lock();
+                // Draw mouse cursor
+                let white_style = PrimitiveStyleBuilder::new()
+                    .fill_color(Rgb888::WHITE)
+                    .build();
+
+                Rectangle::new(Point::new(self.mouse_x, self.mouse_y), Size::new(5, 5))
+                    .into_styled(white_style)
+                    .draw(&mut display)
+                    .unwrap();
+
                 fb.flush();
             }
 
@@ -81,8 +115,4 @@ impl World {
             self.last_render_cycles = end_cycles - start_cycles;
         }
     }
-}
-
-pub trait Renderable {
-    fn render(&mut self, state: &World);
 }
