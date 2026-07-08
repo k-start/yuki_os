@@ -63,6 +63,7 @@ impl DevFs {
 #[derive(Debug)]
 pub struct Device {
     data: Mutex<VecDeque<u8>>,
+    mmap_buffer: Mutex<Option<(x86_64::PhysAddr, usize)>>,
 }
 
 impl Default for Device {
@@ -98,6 +99,22 @@ impl VNode for Device {
     fn ioctl(&self, _cmd: u32, _arg: usize) -> Result<(), Error> {
         todo!()
     }
+
+    fn mmap(&self, offset: usize, size: usize) -> Result<x86_64::PhysAddr, Error> {
+        let mut buffer_guard = self.mmap_buffer.lock();
+        if buffer_guard.is_none() {
+            let num_pages = (size + 4095) / 4096;
+            let phys_addr =
+                crate::memory::allocate_contiguous_frames(num_pages).ok_or(Error::IoError)?;
+            *buffer_guard = Some((phys_addr, num_pages * 4096));
+        }
+        let (phys_addr, buf_size) = buffer_guard.unwrap();
+        if offset + size <= buf_size {
+            Ok(phys_addr + offset)
+        } else {
+            Err(Error::IoError)
+        }
+    }
 }
 
 impl Device {
@@ -105,6 +122,7 @@ impl Device {
         // fix me - mutexes
         Device {
             data: Mutex::new(VecDeque::new()),
+            mmap_buffer: Mutex::new(None),
         }
     }
 }
