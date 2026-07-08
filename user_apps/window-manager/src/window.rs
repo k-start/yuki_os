@@ -6,15 +6,16 @@ use embedded_graphics::{
 };
 
 pub struct Window {
-    x: i32,
-    y: i32,
-    w: u32,
-    h: u32,
+    pub id: u32,
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
 }
 
 impl Window {
-    pub fn new(x: i32, y: i32, w: u32, h: u32) -> Self {
-        Self { x, y, w, h }
+    pub fn new(id: u32, x: i32, y: i32, w: u32, h: u32) -> Self {
+        Self { id, x, y, w, h }
     }
 
     pub fn get_location(&self) -> (i32, i32, u32, u32) {
@@ -52,4 +53,3 @@ impl Window {
         .unwrap();
     }
 }
-

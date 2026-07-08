@@ -1,8 +1,11 @@
+use alloc::format;
 use lazy_static::lazy_static;
 use spin::Mutex;
+use user_api::window::{CreateResponse, WindowCommand};
 
 use crate::event::mouseevent::MouseEvent;
 use crate::framebuffer::{self, Display, FrameBuffer};
+use crate::window::Window;
 use crate::windowmanager::WindowManager;
 use embedded_graphics::{
     mono_font::{ascii::FONT_6X10, MonoTextStyle},
@@ -70,6 +73,52 @@ impl World {
 
         self.window_manager
             .handle_mouse(self.mouse_x, self.mouse_y, e.left);
+    }
+
+    pub fn handle_ipc(&mut self, cmd: WindowCommand) {
+        match cmd {
+            WindowCommand::Create(create_request) => {
+                println!(
+                    "Window CreateRequest: x={}, y={}, width={}, height={}, pid={}",
+                    create_request.x,
+                    create_request.y,
+                    create_request.width,
+                    create_request.height,
+                    create_request.pid
+                );
+
+                let window_id = create_request.pid; // Use pid as window id for now - one day this will be useful
+
+                let new_window = Window::new(
+                    window_id,
+                    create_request.x,
+                    create_request.y,
+                    create_request.width,
+                    create_request.height,
+                );
+                self.window_manager.add_window(new_window);
+
+                let resp_fd = unsafe {
+                    user_api::syscalls::open(
+                        format!("/dev/wm_response_{}\0", create_request.pid).as_bytes(),
+                    )
+                };
+
+                let response = CreateResponse {
+                    window_id,
+                    buffer_size: 0, // we will make a proper buffer soon
+                };
+                let response_slice = unsafe {
+                    core::slice::from_raw_parts(
+                        &response as *const CreateResponse as *const u8,
+                        core::mem::size_of::<CreateResponse>(),
+                    )
+                };
+                unsafe { user_api::syscalls::write(resp_fd, response_slice) };
+
+                self.dirty = true;
+            }
+        }
     }
 
     pub fn render(&mut self) {
