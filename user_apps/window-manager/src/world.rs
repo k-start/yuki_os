@@ -87,7 +87,28 @@ impl World {
                     create_request.pid
                 );
 
+                let fb_info = FRAMEBUFFER.lock().info();
+                let bytes_per_pixel = fb_info.bytes_per_pixel as u8;
+                let pixel_format = match fb_info.pixel_format {
+                    crate::framebuffer::PixelFormat::Rgb => user_api::window::PixelFormat::Rgb,
+                    crate::framebuffer::PixelFormat::Bgr => user_api::window::PixelFormat::Bgr,
+                    crate::framebuffer::PixelFormat::U8 => user_api::window::PixelFormat::U8,
+                    _ => user_api::window::PixelFormat::Unknown,
+                };
+
                 let window_id = create_request.pid; // Use pid as window id for now - one day this will be useful
+                let buffer_size =
+                    create_request.width * create_request.height * bytes_per_pixel as u32;
+
+                // Open the window buffer device and map it to our address space
+                let buf_path = format!("/dev/window_buf_{}\0", window_id);
+                let buf_fd = unsafe { user_api::syscalls::open(buf_path.as_bytes()) };
+                let mmap_addr =
+                    unsafe { user_api::syscalls::mmap(0, buffer_size as usize, buf_fd) };
+
+                let buffer = unsafe {
+                    core::slice::from_raw_parts_mut(mmap_addr as *mut u8, buffer_size as usize)
+                };
 
                 let new_window = Window::new(
                     window_id,
@@ -95,6 +116,8 @@ impl World {
                     create_request.y,
                     create_request.width,
                     create_request.height,
+                    bytes_per_pixel,
+                    buffer,
                 );
                 self.window_manager.add_window(new_window);
 
@@ -106,7 +129,9 @@ impl World {
 
                 let response = CreateResponse {
                     window_id,
-                    buffer_size: 0, // we will make a proper buffer soon
+                    buffer_size,
+                    bytes_per_pixel,
+                    pixel_format,
                 };
                 let response_slice = unsafe {
                     core::slice::from_raw_parts(

@@ -1,5 +1,14 @@
-use crate::syscalls::{get_pid, open, read, write};
+use crate::syscalls::{get_pid, mmap, open, read, write};
 use alloc::format;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
+pub enum PixelFormat {
+    Rgb,
+    Bgr,
+    U8,
+    Unknown,
+}
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -16,6 +25,8 @@ pub struct CreateRequest {
 pub struct CreateResponse {
     pub window_id: u32,
     pub buffer_size: u32,
+    pub bytes_per_pixel: u8,
+    pub pixel_format: PixelFormat,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -27,6 +38,8 @@ pub struct Window {
     pub id: u32,
     pub width: u32,
     pub height: u32,
+    pub bytes_per_pixel: u8,
+    pub pixel_format: PixelFormat,
     pub buffer: &'static mut [u8],
 }
 
@@ -56,6 +69,8 @@ impl Window {
         let mut response = CreateResponse {
             window_id: 0,
             buffer_size: 0,
+            bytes_per_pixel: 0,
+            pixel_format: PixelFormat::Unknown,
         };
 
         let response_size = core::mem::size_of::<CreateResponse>();
@@ -75,13 +90,22 @@ impl Window {
                 total_read += bytes_read as usize;
             }
         }
-        // todo: get our buffer
 
-        Ok(Window {
+        let buf_fd =
+            unsafe { open(format!("/dev/window_buf_{}\0", response.window_id).as_bytes()) };
+        let mmap_addr = unsafe { mmap(0, response.buffer_size as usize, buf_fd) };
+
+        let buffer = unsafe {
+            core::slice::from_raw_parts_mut(mmap_addr as *mut u8, response.buffer_size as usize)
+        };
+
+        Ok(Self {
             id: response.window_id,
-            width: 0,
-            height: 0,
-            buffer: &mut [],
+            width,
+            height,
+            bytes_per_pixel: response.bytes_per_pixel,
+            pixel_format: response.pixel_format,
+            buffer,
         })
     }
 }
