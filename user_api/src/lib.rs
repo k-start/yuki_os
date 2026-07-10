@@ -3,6 +3,9 @@
 #[macro_use]
 pub mod print;
 pub mod syscalls;
+pub mod window;
+
+extern crate alloc;
 
 use core::panic::PanicInfo;
 #[panic_handler]

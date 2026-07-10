@@ -333,6 +333,27 @@ pub fn map_physical_address_to_user(virtaddr: VirtAddr, physaddr: PhysAddr, size
     }
 }
 
+pub fn allocate_contiguous_frames(num_frames: usize) -> Option<PhysAddr> {
+    let memory_info = unsafe { MEMORY_INFO.as_mut()? };
+
+    if num_frames == 0 {
+        return None;
+    }
+
+    let first_frame = memory_info.frame_allocator.allocate_frame()?;
+
+    let first_phys = first_frame.start_address();
+
+    for i in 1..num_frames {
+        let frame = memory_info.frame_allocator.allocate_frame()?;
+        if frame.start_address().as_u64() != first_phys.as_u64() + (i * 4096) as u64 {
+            return None;
+        }
+    }
+
+    Some(first_phys)
+}
+
 // ---------------------------------------------------------------------------------------------
 
 /// A FrameAllocator that always returns `None`.
