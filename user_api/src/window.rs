@@ -22,6 +22,12 @@ pub struct CreateRequest {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
+pub struct RedrawRequest {
+    pub window_id: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct CreateResponse {
     pub window_id: u32,
     pub buffer_size: u32,
@@ -33,6 +39,7 @@ pub struct CreateResponse {
 #[repr(C)]
 pub enum WindowCommand {
     Create(CreateRequest),
+    Redraw(RedrawRequest),
 }
 pub struct Window {
     pub id: u32,
@@ -41,6 +48,7 @@ pub struct Window {
     pub bytes_per_pixel: u8,
     pub pixel_format: PixelFormat,
     pub buffer: &'static mut [u8],
+    pub controller_fd: usize,
 }
 
 impl Window {
@@ -106,6 +114,21 @@ impl Window {
             bytes_per_pixel: response.bytes_per_pixel,
             pixel_format: response.pixel_format,
             buffer,
+            controller_fd,
         })
+    }
+
+    pub fn redraw(&self) -> Result<(), &'static str> {
+        let cmd = WindowCommand::Redraw(RedrawRequest { window_id: self.id });
+
+        let cmd_slice = unsafe {
+            core::slice::from_raw_parts(
+                &cmd as *const WindowCommand as *const u8,
+                core::mem::size_of::<WindowCommand>(),
+            )
+        };
+        unsafe { write(self.controller_fd, cmd_slice) };
+
+        Ok(())
     }
 }

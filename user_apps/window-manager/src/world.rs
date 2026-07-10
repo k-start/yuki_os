@@ -143,6 +143,13 @@ impl World {
 
                 self.dirty = true;
             }
+            WindowCommand::Redraw(redraw_request) => {
+                println!(
+                    "Window RedrawRequest: window_id={}",
+                    redraw_request.window_id
+                );
+                self.dirty = true;
+            }
         }
     }
 

@@ -25,4 +25,6 @@ fn main() {
             window.buffer[offset + 2] = b;
         }
     }
+
+    window.redraw().unwrap();
 }
