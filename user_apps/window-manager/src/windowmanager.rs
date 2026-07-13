@@ -1,6 +1,6 @@
-use crate::framebuffer::Display;
 use crate::window::Window;
 use alloc::vec::Vec;
+use user_api::framebuffer::Display;
 
 pub struct WindowManager {
     pub windows: Vec<Window>,

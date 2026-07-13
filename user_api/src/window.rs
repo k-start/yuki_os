@@ -1,14 +1,8 @@
-use crate::syscalls::{get_pid, mmap, open, read, write};
+use crate::{
+    framebuffer::PixelFormat,
+    syscalls::{get_pid, mmap, open, read, write},
+};
 use alloc::format;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(C)]
-pub enum PixelFormat {
-    Rgb,
-    Bgr,
-    U8,
-    Unknown,
-}
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -78,7 +72,11 @@ impl Window {
             window_id: 0,
             buffer_size: 0,
             bytes_per_pixel: 0,
-            pixel_format: PixelFormat::Unknown,
+            pixel_format: PixelFormat::Unknown {
+                red_position: 0,
+                green_position: 0,
+                blue_position: 0,
+            },
         };
 
         let response_size = core::mem::size_of::<CreateResponse>();

@@ -11,8 +11,6 @@ extern crate user_api;
 extern crate alloc;
 
 mod event;
-mod framebuffer;
-mod graphics;
 mod window;
 mod windowmanager;
 mod world;

@@ -1,9 +1,9 @@
-use crate::framebuffer::Display;
 use embedded_graphics::{
     pixelcolor::Rgb888,
     prelude::*,
     primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment},
 };
+use user_api::framebuffer::Display;
 
 pub struct Window {
     pub id: u32,

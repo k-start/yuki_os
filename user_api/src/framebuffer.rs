@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 use core::slice;
 
+use crate::syscalls;
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct FrameBufferInfo {
     /// The total size in bytes.
@@ -63,10 +65,10 @@ impl FrameBuffer {
         let ptr: *const FrameBufferInfo = &info as *const FrameBufferInfo;
 
         unsafe {
-            user_api::syscalls::ioctl(fd, 0, ptr as usize);
+            syscalls::ioctl(fd, 0, ptr as usize);
         }
 
-        let framebuffer = unsafe { user_api::syscalls::mmap(0, info.byte_len, fd) };
+        let framebuffer = unsafe { syscalls::mmap(0, info.byte_len, fd) };
 
         let back_buffer = alloc::vec![0; info.byte_len];
 
@@ -94,17 +96,17 @@ impl FrameBuffer {
         self.info
     }
 
-    pub(crate) fn buffer_mut(&mut self) -> &mut [u8] {
+    pub fn buffer_mut(&mut self) -> &mut [u8] {
         &mut self.back_buffer
     }
 
-    pub(crate) fn buffer(&self) -> &[u8] {
+    pub fn buffer(&self) -> &[u8] {
         &self.back_buffer
     }
 }
 
 pub struct Display<'f> {
-    pub(crate) framebuffer: &'f mut FrameBuffer,
+    pub framebuffer: &'f mut FrameBuffer,
 }
 
 impl<'f> Display<'f> {

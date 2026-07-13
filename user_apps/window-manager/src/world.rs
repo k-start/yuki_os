@@ -4,7 +4,6 @@ use spin::Mutex;
 use user_api::window::{CreateResponse, WindowCommand};
 
 use crate::event::mouseevent::MouseEvent;
-use crate::framebuffer::{self, Display, FrameBuffer};
 use crate::window::Window;
 use crate::windowmanager::WindowManager;
 use embedded_graphics::{
@@ -14,6 +13,7 @@ use embedded_graphics::{
     primitives::{PrimitiveStyleBuilder, Rectangle},
     text::Text,
 };
+use user_api::framebuffer::{self, Display, FrameBuffer};
 
 lazy_static! {
     pub static ref FRAMEBUFFER: Mutex<FrameBuffer> = {
@@ -89,12 +89,7 @@ impl World {
 
                 let fb_info = FRAMEBUFFER.lock().info();
                 let bytes_per_pixel = fb_info.bytes_per_pixel as u8;
-                let pixel_format = match fb_info.pixel_format {
-                    crate::framebuffer::PixelFormat::Rgb => user_api::window::PixelFormat::Rgb,
-                    crate::framebuffer::PixelFormat::Bgr => user_api::window::PixelFormat::Bgr,
-                    crate::framebuffer::PixelFormat::U8 => user_api::window::PixelFormat::U8,
-                    _ => user_api::window::PixelFormat::Unknown,
-                };
+                let pixel_format = fb_info.pixel_format;
 
                 let window_id = create_request.pid; // Use pid as window id for now - one day this will be useful
                 let buffer_size =

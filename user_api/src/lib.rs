@@ -2,6 +2,8 @@
 
 #[macro_use]
 pub mod print;
+pub mod framebuffer;
+pub mod graphics;
 pub mod syscalls;
 pub mod window;
 
